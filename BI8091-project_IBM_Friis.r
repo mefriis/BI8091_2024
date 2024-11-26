@@ -70,11 +70,14 @@ initialize_population <- function(n) {
     lengths <- ifelse(
         stages == "juvenile", pmax(rnorm(n, mean = 12.5, sd = 5), 5), rnorm(n, mean = 62.5, sd = 15)
     )
+    females <- sample(c(TRUE, FALSE), n, replace = TRUE, prob = c(0.5, 0.5))
+
 
     data.frame(
         id = 1:n,
         stage = stages,
         length = lengths,
+        female = females,
         alive = TRUE
     )
 }
@@ -163,10 +166,42 @@ summer_update <- function(population) {
     return(population)
 }
 
+#' Autmn Migration
+
+autmn_migration <- function(population) {
+
+    # Identify juveniles and migrants
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
+
+    # Assess mortality
+    migrants$alive <- runif(nrow(migrants)) > mig_mort_base
+
+    # Combine juveniles and migrants
+    population <- rbind(juveniles, migrants)
+    return(population)
+}
+
+#' Spawning
+spawning <- function(population) {
+    # Identify juveniles and migrants
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
+
+    can_spawn <- runif(nrow(migrants)) > 0.5
+
+
+
+    # Combine juveniles and migrants
+    population <- rbind(juveniles, migrants)
+    return(population)
+}
+
 population <- initialize_population(100)
 population2 <- winter_update(population)
 population3 <- spring_migration(population2, 6)
 population4 <- summer_update(population3)
+population5 <- autmn_migration(population4)
 
 print(population)
 hist(population$length)
@@ -174,3 +209,4 @@ hist(population2$length)
 hist(population3$length)
 print(population3)
 print(population4)
+print(population5)
