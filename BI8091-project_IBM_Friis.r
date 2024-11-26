@@ -64,6 +64,8 @@ flow_th <- 10
 #### Turbine Mortatily, factor
 turb_mort <- 0.5
 
+#' Initialize the population
+#' @return data.frame with columns id, stage, length and alive
 initialize_population <- function(n) {
     stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.8, 0.2))
     lengths <- ifelse(
@@ -78,6 +80,7 @@ initialize_population <- function(n) {
     )
 }
 
+#' Update the population during winter: from spawning to downstream migration
 winter_update <- function(population) {
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
