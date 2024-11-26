@@ -29,8 +29,32 @@ setup_packages <- function() {
     print("Packages loaded")
 }
 
-
-
 setup_packages()
 hgd()
 hgd_view()
+
+### Simulation ###
+
+# Parameters
+
+### Parameters
+#### Number of Fish at Start, individuals
+num_fish <- 1000
+#### Simulation Runtime, years
+max_time <- 10
+#### Juvenile Mortality, factor
+juv_mort <- 0.3
+#### Base Mortality for Migrations, factor
+mig_mort_base <- 0.2
+#### Base Mortality at Sea, factor
+sea_mort_base <- 0.2
+#### Growth of Juveniles, length in cm
+growth_juv <- 5
+#### Growth of Residents, length in cm
+growth_res <- 2
+#### Growth of Migrants, length in cm
+growth_mig <- 10
+#### Flow Threshold for Ice Hatch Migrations, flow-rate
+flow_th <- 10
+#### Turbine Mortatily, factor
+turb_mort <- 0.5
