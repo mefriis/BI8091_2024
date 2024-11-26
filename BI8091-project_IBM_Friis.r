@@ -42,17 +42,17 @@ hgd_view()
 num_fish <- 1000
 #### Simulation Runtime, years
 max_time <- 10
-#### Juvenile Vinter Mortality, factor
-juv_mort <- 0.5
-#### Migrants Vinter Mortality, factor
-mig_mort <- 0.1
+#### Juvenile Bi-Annual Mortality, factor
+juv_mort <- 0.25
+#### Migrants Winter Mortality, factor
+mig_winter_mort <- 0.1
 #### Base Mortality for Migrants, factor
 mig_mort_base <- 0.05
-#### Base Mortality at Sea, factor
-sea_mort_base <- 0.2
-#### Growth of Juveniles, length in cm
+#### Mortality at Sea, factor
+sea_mort <- 0.2
+#### Growth of Juveniles, Bi-Annual, length in cm
 growth_juv <- function() {
-    return(sample(2:7, 1))
+    return(sample(1:3, 1))
 }
 #### Growth of Migrants, length in cm
 growth_mig <- function() {
@@ -85,13 +85,14 @@ winter_update <- function(population) {
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
-    migrants$alive <- runif(nrow(migrants)) > mig_mort_base
+    migrants$alive <- runif(nrow(migrants)) > mig_winter_mort
 
     juveniles$length <- juveniles$length + growth_juv()
 
     population <- rbind(juveniles, migrants)
     return(population)
 }
+
 #' Update the population during spring migration
 spring_migration <- function(population, flow) {
     # Identify old migrants
@@ -135,18 +136,41 @@ spring_migration <- function(population, flow) {
         migrants$alive <- !(by_turb | by_base)
     }
 
+    # Remove mortality rate
+    migrants$mortality_rate <- NULL
+
     # Combine remaining juveniles and migrants back into the population
     population <- rbind(remaining_juveniles, migrants)
     return(population)
 }
 
+#' Update the population during summer
+summer_update <- function(population) {
+    # Identify juveniles and migrants
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
+
+    # Assess mortality
+    juveniles$alive <- runif(nrow(juveniles)) > juv_mort
+    migrants$alive <- runif(nrow(migrants)) > sea_mort
+
+    # Update lengths
+    juveniles$length <- juveniles$length + growth_juv()
+    migrants$length <- migrants$length + growth_mig()
+
+    # Combine juveniles and migrants
+    population <- rbind(juveniles, migrants)
+    return(population)
+}
 
 population <- initialize_population(100)
 population2 <- winter_update(population)
 population3 <- spring_migration(population2, 6)
+population4 <- summer_update(population3)
 
 print(population)
 hist(population$length)
 hist(population2$length)
 hist(population3$length)
 print(population3)
+print(population4)
