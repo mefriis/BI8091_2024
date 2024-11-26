@@ -46,8 +46,8 @@ max_time <- 10
 juv_mort <- 0.5
 #### Migrants Vinter Mortality, factor
 mig_mort <- 0.1
-#### Base Mortality for Migrations, factor
-mig_mort_base <- 0.2
+#### Base Mortality for Migrants, factor
+mig_mort_base <- 0.05
 #### Base Mortality at Sea, factor
 sea_mort_base <- 0.2
 #### Growth of Juveniles, length in cm
@@ -58,11 +58,10 @@ growth_juv <- function() {
 growth_mig <- function() {
     return(sample(5:15, 1))
 }
-
 #### Flow Threshold for Ice Hatch Migrations, flow-rate
 flow_th <- 10
-#### Turbine Mortatily, factor
-turb_mort <- 0.5
+#### Turbine Base Mortatily, function
+turb_mort_base <- 0.2
 
 #' Initialize the population
 #' @return data.frame with columns id, stage, length and alive
@@ -93,12 +92,61 @@ winter_update <- function(population) {
     population <- rbind(juveniles, migrants)
     return(population)
 }
+#' Update the population during spring migration
+spring_migration <- function(population, flow) {
+    # Identify old migrants
+    old_migrants <- population[population$stage == "migrant" & population$alive, ]
+    # Identify new migrants, which are juveniles above a certain length
+    new_migrants <- population[population$stage == "juvenile" & population$length > 15 & population$alive, ]
 
+    # Identify remaining juveniles
+    remaining_juveniles <-
+        population[population$stage == "juvenile" & population$length <= 15 & population$alive, ]
+    # Remove new migrants from juveniles
+    remaining_juveniles <-
+        remaining_juveniles[!remaining_juveniles$id %in% new_migrants$id, ]
+
+    # Combine old and new migrants
+    migrants <- rbind(old_migrants, new_migrants)
+
+    #### Calculate mortality rate for migrants
+    # Mortality rate is a function of base mortality and length
+    migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
+    # Limit mortality rate to 1
+    migrants$mortality_rate <- pmin(migrants$mortality_rate, 1)
+
+    #### Scenarios for migrants depending on flow
+    # If flow is below threshold, all migrants must pass the turbine
+    # If flow is above threshold, each fish only has a 30% chance of passing the turbine
+    if (flow < flow_th) {
+        migrants$alive <- runif(nrow(migrants)) > migrants$mortality_rate
+
+    } else {
+        # Determine which fish pass the turbine
+        turb <- runif(nrow(migrants)) < 0.3
+
+        # Mortality due to turbine passage
+        by_turb <- turb & (runif(nrow(migrants)) < migrants$mortality_rate)
+
+        # Mortality due to base mortality when not passing the turbine
+        by_base <- !turb & (runif(nrow(migrants)) < mig_mort_base)
+
+        # Identify migrants that survive
+        migrants$alive <- !(by_turb | by_base)
+    }
+
+    # Combine remaining juveniles and migrants back into the population
+    population <- rbind(remaining_juveniles, migrants)
+    return(population)
+}
 
 
 population <- initialize_population(100)
 population2 <- winter_update(population)
+population3 <- spring_migration(population2, 6)
 
 print(population)
 hist(population$length)
 hist(population2$length)
+hist(population3$length)
+print(population3)
