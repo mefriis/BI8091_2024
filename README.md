@@ -6,26 +6,26 @@ The code for the IBM is located in **BI8091-project_IBM_Friis.r**.
 ### Pseudo Code 
 
 ### Parameters
-#### Number of Fish at Start, individuals
-num_fish
-#### Simulation Runtime, years
-max_time
-#### Juvenile Mortality, factor
-juv_mort
-#### Base Mortality for Migrations, factor
-mig_mort_base
-#### Base Mortality at Sea, factor 
-sea_mort_base
-#### Growth of Juveniles, length in cm
-growth_juv
-#### Growth of Residents, length in cm
-growth_res
-#### Growth of Migrants, length in cm
-growth_mig
-#### Flow Threshold for Ice Hatch Migrations, flow-rate
-flow_th
-#### Turbine Mortatily, factor
-turb_mort
+##### Number of Fish at Start, individuals
+*num_fish*
+##### Simulation Runtime, years
+*max_time*
+##### Juvenile Mortality, factor
+*juv_mort*
+##### Base Mortality for Migrations, factor
+*mig_mort_base*
+##### Base Mortality at Sea, factor 
+*sea_mort_base*
+##### Growth of Juveniles, length in cm
+*growth_juv*
+##### Growth of Residents, length in cm
+*growth_res*
+##### Growth of Migrants, length in cm
+*growth_mig*
+##### Flow Threshold for Ice Hatch Migrations, flow-rate
+*flow_th*
+##### Turbine Mortatily, factor
+*turb_mort*
 
 ### Model Limitations
 
