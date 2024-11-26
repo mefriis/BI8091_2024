@@ -62,6 +62,8 @@ growth_mig <- function() {
 flow_th <- 10
 #### Turbine Base Mortatily, function
 turb_mort_base <- 0.2
+#### Juvenile Fish per Spawning Female
+juv_per_female <- 100
 
 #' Initialize the population
 #' @return data.frame with columns id, stage, length and alive
@@ -167,7 +169,6 @@ summer_update <- function(population) {
 }
 
 #' Autmn Migration
-
 autmn_migration <- function(population) {
 
     # Identify juveniles and migrants
@@ -188,12 +189,34 @@ spawning <- function(population) {
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
-    can_spawn <- runif(nrow(migrants)) > 0.5
+    #### Assess which migrants can spawn
+    females <- migrants[migrants$female, ]
+    males <- migrants[!migrants$female, ]
 
+    # Only spawn if there are both females and males alive
+    if (nrow(females) > 0 && nrow(males) > 0) {
 
+        print("Spawning")
+        # Define the number of new juveniles
+        num_new_juveniles <- nrow(females) * juv_per_female
+
+        # Create new juveniles data frame
+        new_juveniles <- data.frame(
+            id = max(population$id) + 1:num_new_juveniles,
+            stage = rep("juvenile", num_new_juveniles),
+            length = rnorm(num_new_juveniles, mean = 2, sd = 0.25),
+            female = sample(c(TRUE, FALSE), num_new_juveniles, replace = TRUE),
+            alive = rep(TRUE, num_new_juveniles)
+        )
+    } else {
+        print("No spawning")
+    }
+
+    print(females)
+    print(males)
 
     # Combine juveniles and migrants
-    population <- rbind(juveniles, migrants)
+    population <- rbind(new_juveniles, juveniles, migrants)
     return(population)
 }
 
@@ -202,6 +225,7 @@ population2 <- winter_update(population)
 population3 <- spring_migration(population2, 6)
 population4 <- summer_update(population3)
 population5 <- autmn_migration(population4)
+population6 <- spawning(population5)
 
 print(population)
 hist(population$length)
@@ -210,3 +234,5 @@ hist(population3$length)
 print(population3)
 print(population4)
 print(population5)
+print(population6)
+
