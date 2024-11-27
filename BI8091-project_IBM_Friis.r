@@ -61,14 +61,19 @@ initialize_population <- function(n) {
 #' @param growth_juv Function for juvenile growth
 #' @return Updated population
 winter_update <- function(population, juv_mort, mig_winter_mort, growth_juv) {
+
+    # Remove dead fish
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
+    # Assess mortality
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
     migrants$alive <- runif(nrow(migrants)) > mig_winter_mort
 
+    # Update lengths for juveniles
     juveniles$length <- juveniles$length + growth_juv()
 
+    # Combine juveniles and migrants
     population <- rbind(juveniles, migrants)
     return(population)
 }
@@ -98,6 +103,7 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
         # Combine old and new migrants
         migrants <- rbind(old_migrants, new_migrants)
     }
+    print(paste("Number of migrants:", nrow(migrants)))
 
     # Identify remaining juveniles
     remaining_juveniles <-
@@ -222,6 +228,19 @@ spawning <- function(population, juv_per_female) {
     return(population)
 }
 
+#' Assess Mortality
+#' @param population data.frame with columns id, stage, length and alive
+#' @param year Year in simulation
+#' @param season Season during year in simulation
+asses_mortality <- function(population, year, season) {
+    unalived <- population[!population$alive, ]
+    if (nrow(unalived) > 0) {
+        unalived$year <- year
+        unalived$season <- season
+    }
+    return(unalived)
+}
+
 #' Simulation
 #' @param num_fish Number of Fish at Start, individuals
 #' @param max_time Simulation Runtime, years
@@ -235,42 +254,63 @@ spawning <- function(population, juv_per_female) {
 #' @param flow_th Flow Threshold for Ice Hatch Migrations, flow-rate
 #' @param turb_mort_base Turbine Base Mortatily, function
 #' @param juv_per_female Juvenile Fish per Spawning Female
+#' @param snap Take a snapshot of the population after each winter if TRUE
 #' @return
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base,
-    sea_mort, growth_juv, growth_mig, flow, flow_th, turb_mort_base, juv_per_female
+    sea_mort, growth_juv, growth_mig, flow, flow_th, turb_mort_base, juv_per_female,
+    snap
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
+    # Initialize unalived
+    unalived <- data.frame()
+    # Initialize history, which takes a snapshot of the population after each winter
+    history <- data.frame()
 
     # Run simulation
     for (t in 1:max_time) {
         print(paste("Year", t))
 
-        # Winter update
+        ### Winter update
         population <- winter_update(population, juv_mort, mig_winter_mort, growth_juv)
+        # Assess mortality
+        unalived <- rbind(unalived, asses_mortality(population, t, "winter"))
 
-        # Spring migration
+        # Take a snapshot of the population if snap is TRUE
+        if (snap == TRUE) {
+            # Saves living individuals in snapshot
+            snapshot <- population[population$alive == TRUE, ]
+            snapshot$year <- t
+            history <- rbind(history, snapshot)
+        } else {
+            history <- NULL
+        }
+
+        ### Spring migration
         population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
+        # Assess mortality
+        unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
 
-        # Summer update
+        ### Summer update
         population <- summer_update(population, juv_mort, sea_mort, growth_juv, growth_mig)
+        # Assess mortality
+        unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
 
-        # Autmn migration
+        ### Autmn migration
         population <- autmn_migration(population, mig_mort_base)
+        # Assess mortality
+        unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
 
-        # Spawning
+        ### Spawning
         population <- spawning(population, juv_per_female)
     }
-    return(population)
+    return(list(population = population, unalived = unalived, history = history))
 }
 
-
-
-pop <- data.frame()
-pop <- simulation(
+pops <- simulation(
     num_fish = 1000,
-    max_time = 100,
+    max_time = 3,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
@@ -284,9 +324,13 @@ pop <- simulation(
     flow = 5,
     flow_th = 10,
     turb_mort_base = 0.2,
-    juv_per_female = 100
+    juv_per_female = 100,
+    snap = TRUE
 )
 
+pop <- pops$population
+ded <- pops$unalived
+history <- pops$history
 
 hist(pop$length, breaks = 20, main = "Fish Length Distribution", xlab = "Length (cm)")
 
