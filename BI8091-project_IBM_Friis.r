@@ -54,13 +54,22 @@ initialize_population <- function(n) {
     )
 }
 
+#' Juvenile growth
+#' @param n Number of juvenile fish
+#' @return Growth of juvenile fish
+juvnile_growth <- function(n) {
+    base_growth <- rnorm(1, mean = 3, sd = 1)
+    base_growth <- pmax(base_growth, 0) # Growth cannot be negative
+    density_dependent <- 1 - (1 / 10000) * n # 1 at n=0, and 0 at n=10000
+    return(base_growth + density_dependent)
+}
+
 #' Update the population during winter: from spawning to downstream migration
 #' @param population data.frame with columns id, stage, length and alive
 #' @param juv_mort Juvenile mortality rate
 #' @param mig_winter_mort Migrant winter mortality rate
-#' @param growth_juv Function for juvenile growth
 #' @return Updated population
-winter_update <- function(population, juv_mort, mig_winter_mort, growth_juv) {
+winter_update <- function(population, juv_mort, mig_winter_mort) {
 
     # Remove dead fish
     juveniles <- population[population$stage == "juvenile" & population$alive,]
@@ -70,9 +79,10 @@ winter_update <- function(population, juv_mort, mig_winter_mort, growth_juv) {
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
     migrants$alive <- runif(nrow(migrants)) > mig_winter_mort
 
-    # Update lengths for juveniles
-    juveniles$length <- juveniles$length + growth_juv()
-
+    n_juv <- sum(juveniles$alive)
+    print(paste("Number of juveniles:", n_juv))
+    # Update lengths
+    juveniles$length <- juveniles$length + juvnile_growth(n_juv)
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrants)
     return(population)
@@ -150,10 +160,9 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 #' @param population data.frame with columns id, stage, length and alive
 #' @param juv_mort Juvenile mortality rate
 #' @param sea_mort Mortality at sea
-#' @param growth_juv Function for juvenile growth
 #' @param growth_mig Function for migrant growth
 #' @return Updated population
-summer_update <- function(population, juv_mort, sea_mort, growth_juv, growth_mig) {
+summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
@@ -162,8 +171,11 @@ summer_update <- function(population, juv_mort, sea_mort, growth_juv, growth_mig
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
     migrants$alive <- runif(nrow(migrants)) > sea_mort
 
+    n_juv <- sum(juveniles$alive)
+    (print(paste("Number of juveniles:", n_juv)))
+
     # Update lengths
-    juveniles$length <- juveniles$length + growth_juv()
+    juveniles$length <- juveniles$length + juvnile_growth(n_juv)
     migrants$length <- migrants$length + growth_mig()
 
     # Combine juveniles and migrants
@@ -294,7 +306,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         print(paste("Year", t))
 
         ### Winter update
-        population <- winter_update(population, juv_mort, mig_winter_mort, growth_juv)
+        population <- winter_update(population, juv_mort, mig_winter_mort)
 
         # Assess mortality
         if  (undertaker == TRUE) {
@@ -327,7 +339,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         }
 
         ### Summer update
-        population <- summer_update(population, juv_mort, sea_mort, growth_juv, growth_mig)
+        population <- summer_update(population, juv_mort, sea_mort, growth_mig)
         # Assess mortality
         if  (undertaker == TRUE) {
             unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
@@ -365,14 +377,11 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 100,
-    juv_mort = 0.575,
+    max_time = 1000,
+    juv_mort = 0.574,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
     sea_mort = 0.2,
-    growth_juv = function() {
-        return(sample(2:5, 1))
-    },
     growth_mig = function() {
         return(sample(5:15, 1))
     },
@@ -387,6 +396,7 @@ pops <- simulation(
 
 result <- pops$result
 plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
+plot(result$year, result$juveniles, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
 
 
 pop <- pops$population
