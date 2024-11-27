@@ -35,35 +35,6 @@ hgd_view()
 
 ### Simulation ###
 
-# Parameters
-
-### Parameters
-#### Number of Fish at Start, individuals
-num_fish <- 1000
-#### Simulation Runtime, years
-max_time <- 10
-#### Juvenile Bi-Annual Mortality, factor
-juv_mort <- 0.25
-#### Migrants Winter Mortality, factor
-mig_winter_mort <- 0.1
-#### Base Mortality for Migrants, factor
-mig_mort_base <- 0.05
-#### Mortality at Sea, factor
-sea_mort <- 0.2
-#### Growth of Juveniles, Bi-Annual, length in cm
-growth_juv <- function() {
-    return(sample(1:3, 1))
-}
-#### Growth of Migrants, length in cm
-growth_mig <- function() {
-    return(sample(5:15, 1))
-}
-#### Flow Threshold for Ice Hatch Migrations, flow-rate
-flow_th <- 10
-#### Turbine Base Mortatily, function
-turb_mort_base <- 0.2
-#### Juvenile Fish per Spawning Female
-juv_per_female <- 100
 
 #' Initialize the population
 #' @return data.frame with columns id, stage, length and alive
@@ -126,7 +97,6 @@ spring_migration <- function(population, flow) {
     # If flow is above threshold, each fish only has a 30% chance of passing the turbine
     if (flow < flow_th) {
         migrants$alive <- runif(nrow(migrants)) > migrants$mortality_rate
-
     } else {
         # Determine which fish pass the turbine
         turb <- runif(nrow(migrants)) < 0.3
@@ -170,7 +140,6 @@ summer_update <- function(population) {
 
 #' Autmn Migration
 autmn_migration <- function(population) {
-
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
@@ -195,7 +164,6 @@ spawning <- function(population) {
 
     # Only spawn if there are both females and males alive
     if (nrow(females) > 0 && nrow(males) > 0) {
-
         print("Spawning")
         # Define the number of new juveniles
         num_new_juveniles <- nrow(females) * juv_per_female
@@ -220,6 +188,67 @@ spawning <- function(population) {
     return(population)
 }
 
+#' Similaton
+
+simulation <- function() {
+    # Initialize population
+    population <- initialize_population(num_fish)
+
+    # Run simulation
+    for (t in 1:max_time) {
+        print(paste("Year", t))
+
+        # Winter update
+        population <- winter_update(population)
+
+        # Spring migration
+        population <- spring_migration(population, 6)
+
+        # Summer update
+        population <- summer_update(population)
+
+        # Autmn migration
+        population <- autmn_migration(population)
+
+        # Spawning
+        population <- spawning(population)
+
+        # Print population
+        print(population)
+    }
+}
+
+
+# Parameters
+
+### Parameters
+#### Number of Fish at Start, individuals
+num_fish <- 1000
+#### Simulation Runtime, years
+max_time <- 10
+#### Juvenile Bi-Annual Mortality, factor
+juv_mort <- 0.25
+#### Migrants Winter Mortality, factor
+mig_winter_mort <- 0.1
+#### Base Mortality for Migrants, factor
+mig_mort_base <- 0.05
+#### Mortality at Sea, factor
+sea_mort <- 0.2
+#### Growth of Juveniles, Bi-Annual, length in cm
+growth_juv <- function() {
+    return(sample(1:3, 1))
+}
+#### Growth of Migrants, length in cm
+growth_mig <- function() {
+    return(sample(5:15, 1))
+}
+#### Flow Threshold for Ice Hatch Migrations, flow-rate
+flow_th <- 10
+#### Turbine Base Mortatily, function
+turb_mort_base <- 0.2
+#### Juvenile Fish per Spawning Female
+juv_per_female <- 100
+
 population <- initialize_population(100)
 population2 <- winter_update(population)
 population3 <- spring_migration(population2, 6)
@@ -235,4 +264,3 @@ print(population3)
 print(population4)
 print(population5)
 print(population6)
-
