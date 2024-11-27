@@ -41,7 +41,7 @@ hgd_view()
 initialize_population <- function(n) {
     stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.95, 0.05))
     lengths <- ifelse(
-        stages == "juvenile", pmax(rnorm(n, mean = 10, sd = 5), 5), rnorm(n, mean = 62.5, sd = 30)
+        stages == "juvenile", pmax(rnorm(n, mean = 5, sd = 7), 5), rnorm(n, mean = 62.5, sd = 30)
     )
     females <- sample(c(TRUE, FALSE), n, replace = TRUE, prob = c(0.5, 0.5))
 
@@ -355,7 +355,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         # Check if population is extinct
         if (nrow(population) == 0) {
             print("Population extinct")
-            break
+            return(list(population = population, unalived = unalived, history = history, result = result))
         }
         # Update mID
         mID <- max(population$id)
@@ -366,7 +366,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 pops <- simulation(
     num_fish = 10000,
     max_time = 100,
-    juv_mort = 0.60,
+    juv_mort = 0.575,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
     sea_mort = 0.2,
@@ -395,6 +395,8 @@ history <- pops$history
 result <- pops$result
 result
 
+hist
+
 plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
 
 sum(pop$stage == "migrant")
@@ -405,4 +407,5 @@ sum(ded$season == "winter")
 sum(ded$season == "spring")
 sum(ded$season == "summer")
 sum(ded$season == "autmn")
-hist(pop$length, breaks = 20, main = "Fish Length Distribution", xlab = "Length (cm)")
+hist(pop$length, breaks = 100, main = "Fish Length Distribution", xlab = "Length (cm)")
+str(pop)
