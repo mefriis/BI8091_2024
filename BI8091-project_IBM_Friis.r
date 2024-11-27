@@ -39,9 +39,9 @@ hgd_view()
 #' @return data.frame with columns id, stage, length and alive
 #' @param n Number of fish
 initialize_population <- function(n) {
-    stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.8, 0.2))
+    stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.95, 0.05))
     lengths <- ifelse(
-        stages == "juvenile", pmax(rnorm(n, mean = 12.5, sd = 5), 5), rnorm(n, mean = 62.5, sd = 15)
+        stages == "juvenile", pmax(rnorm(n, mean = 10, sd = 5), 5), rnorm(n, mean = 62.5, sd = 30)
     )
     females <- sample(c(TRUE, FALSE), n, replace = TRUE, prob = c(0.5, 0.5))
 
@@ -63,8 +63,8 @@ initialize_population <- function(n) {
 winter_update <- function(population, juv_mort, mig_winter_mort, growth_juv) {
 
     # Remove dead fish
-    juveniles <- population[population$stage == "juvenile" & population$alive, ]
-    migrants <- population[population$stage == "migrant" & population$alive, ]
+    juveniles <- population[population$stage == "juvenile" & population$alive,]
+    migrants <- population[population$stage == "migrant" & population$alive,]
 
     # Assess mortality
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
@@ -177,8 +177,8 @@ summer_update <- function(population, juv_mort, sea_mort, growth_juv, growth_mig
 #' @return Updated population
 autmn_migration <- function(population, mig_mort_base) {
     # Identify juveniles and migrants
-    juveniles <- population[population$stage == "juvenile" & population$alive, ]
-    migrants <- population[population$stage == "migrant" & population$alive, ]
+    juveniles <- population[population$stage == "juvenile" & population$alive,]
+    migrants <- population[population$stage == "migrant" & population$alive,]
 
     # Assess mortality
     migrants$alive <- runif(nrow(migrants)) > mig_mort_base
@@ -194,12 +194,12 @@ autmn_migration <- function(population, mig_mort_base) {
 #' @return Updated population
 spawning <- function(mID, population, juv_per_female) {
     # Identify juveniles and migrants
-    juveniles <- population[population$stage == "juvenile" & population$alive, ]
-    migrants <- population[population$stage == "migrant" & population$alive, ]
+    juveniles <- population[population$stage == "juvenile" & population$alive,]
+    migrants <- population[population$stage == "migrant" & population$alive,]
 
     #### Assess which migrants can spawn
-    females <- migrants[migrants$female, ]
-    males <- migrants[!migrants$female, ]
+    females <- migrants[migrants$female,]
+    males <- migrants[!migrants$female,]
 
     # Only spawn if there are both females and males alive
     if (nrow(females) > 0 && nrow(males) > 0) {
@@ -233,12 +233,27 @@ spawning <- function(mID, population, juv_per_female) {
 #' @param year Year in simulation
 #' @param season Season during year in simulation
 asses_mortality <- function(population, year, season) {
-    unalived <- population[!population$alive, ]
+    unalived <- population[!population$alive,]
     if (nrow(unalived) > 0) {
         unalived$year <- year
         unalived$season <- season
     }
     return(unalived)
+}
+
+#' Assess Count
+#' @param population data.frame with columns id, stage, length and alive
+#' @param year Year in simulation
+#' @param season Season during year in simulation
+#' @return List with year, season, juvenile, migrant and number of female migrants
+asses_count <- function(population, year, season) {
+    result <- list()
+    result$year <- year
+    result$season <- season
+    result$juveniles <- sum(population$stage == "juvenile")
+    result$migrants <- sum(population$stage == "migrant")
+    result$migrants_female <- sum(population$stage == "migrant" & population$female)
+    return(result)
 }
 
 #' Simulation
@@ -254,12 +269,14 @@ asses_mortality <- function(population, year, season) {
 #' @param flow_th Flow Threshold for Ice Hatch Migrations, flow-rate
 #' @param turb_mort_base Turbine Base Mortatily, function
 #' @param juv_per_female Juvenile Fish per Spawning Female
+#' @param undertaker Save the unalived Fish, data.frame
 #' @param snap Take a snapshot of the population after each winter if TRUE
+#' @param count Count the number of fish in each stage if TRUE
 #' @return
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, turb_mort_base, juv_per_female,
-    snap
+    undertaker, snap, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -269,6 +286,8 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
     unalived <- data.frame()
     # Initialize history, which takes a snapshot of the population after each winter
     history <- data.frame()
+    # Initialize count, which counts the number of fish in each stage
+    result <- data.frame()
 
     # Run simulation
     for (t in 1:max_time) {
@@ -276,64 +295,114 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
         ### Winter update
         population <- winter_update(population, juv_mort, mig_winter_mort, growth_juv)
+
         # Assess mortality
-        unalived <- rbind(unalived, asses_mortality(population, t, "winter"))
+        if  (undertaker == TRUE) {
+            unalived <- rbind(unalived, asses_mortality(population, t, "winter"))
+        }
 
         # Take a snapshot of the population if snap is TRUE
         if (snap == TRUE) {
             # Saves living individuals in snapshot
-            snapshot <- population[population$alive == TRUE, ]
+            snapshot <- population[population$alive == TRUE,]
             snapshot$year <- t
             history <- rbind(history, snapshot)
-        } else {
-            history <- NULL
+        }
+
+        # Count the number of fish in each stage if count is TRUE
+        if (count == TRUE) {
+            result <- rbind(result, asses_count(population, t, "winter"))
         }
 
         ### Spring migration
         population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
         # Assess mortality
-        unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
+        if  (undertaker == TRUE) {
+            unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
+        }
+
+        # Count the number of fish in each stage if count is TRUE
+        if (count == TRUE) {
+            result <- rbind(result, asses_count(population, t, "spring"))
+        }
 
         ### Summer update
         population <- summer_update(population, juv_mort, sea_mort, growth_juv, growth_mig)
         # Assess mortality
-        unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
+        if  (undertaker == TRUE) {
+            unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
+        }
+        # Count the number of fish in each stage if count is TRUE
+        if (count == TRUE) {
+            result <- rbind(result, asses_count(population, t, "summer"))
+        }
 
         ### Autmn migration
         population <- autmn_migration(population, mig_mort_base)
         # Assess mortality
-        unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
+        if  (undertaker == TRUE) {
+            unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
+        }
+
+        # Count the number of fish in each stage if count is TRUE
+        if (count == TRUE) {
+            result <- rbind(result, asses_count(population, t, "autmn"))
+        }
 
         ### Spawning
         population <- spawning(mID, population, juv_per_female)
+
+        # Check if population is extinct
+        if (nrow(population) == 0) {
+            print("Population extinct")
+            break
+        }
         # Update mID
         mID <- max(population$id)
     }
-    return(list(population = population, unalived = unalived, history = history))
+    return(list(population = population, unalived = unalived, history = history, result = result))
 }
 
 pops <- simulation(
-    num_fish = 1000,
-    max_time = 3,
-    juv_mort = 0.4,
+    num_fish = 10000,
+    max_time = 100,
+    juv_mort = 0.60,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
     sea_mort = 0.2,
     growth_juv = function() {
-        return(sample(1:3, 1))
+        return(sample(2:5, 1))
     },
     growth_mig = function() {
         return(sample(5:15, 1))
     },
-    flow = 5,
+    flow = 11,
     flow_th = 10,
     turb_mort_base = 0.2,
-    juv_per_female = 100,
-    snap = TRUE
+    juv_per_female = 70,
+    undertaker = FALSE,
+    snap = FALSE,
+    count = TRUE
 )
+
+result <- pops$result
+plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
+
 
 pop <- pops$population
 ded <- pops$unalived
 history <- pops$history
+result <- pops$result
+result
 
+plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
+
+sum(pop$stage == "migrant")
+sum(pop$stage == "juvenile")
+
+boxplot(ded$length ~ ded$season, main = "Dead Fish Length Distribution", xlab = "Season", ylab = "Length (cm)")
+sum(ded$season == "winter")
+sum(ded$season == "spring")
+sum(ded$season == "summer")
+sum(ded$season == "autmn")
 hist(pop$length, breaks = 20, main = "Fish Length Distribution", xlab = "Length (cm)")
