@@ -72,8 +72,8 @@ juvnile_growth <- function(n) {
 winter_update <- function(population, juv_mort, mig_winter_mort) {
 
     # Remove dead fish
-    juveniles <- population[population$stage == "juvenile" & population$alive,]
-    migrants <- population[population$stage == "migrant" & population$alive,]
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
 
     # Assess mortality
     juveniles$alive <- runif(nrow(juveniles)) > juv_mort
@@ -189,8 +189,8 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
 #' @return Updated population
 autmn_migration <- function(population, mig_mort_base) {
     # Identify juveniles and migrants
-    juveniles <- population[population$stage == "juvenile" & population$alive,]
-    migrants <- population[population$stage == "migrant" & population$alive,]
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
 
     # Assess mortality
     migrants$alive <- runif(nrow(migrants)) > mig_mort_base
@@ -206,12 +206,12 @@ autmn_migration <- function(population, mig_mort_base) {
 #' @return Updated population
 spawning <- function(mID, population, juv_per_female) {
     # Identify juveniles and migrants
-    juveniles <- population[population$stage == "juvenile" & population$alive,]
-    migrants <- population[population$stage == "migrant" & population$alive,]
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+    migrants <- population[population$stage == "migrant" & population$alive, ]
 
     #### Assess which migrants can spawn
-    females <- migrants[migrants$female,]
-    males <- migrants[!migrants$female,]
+    females <- migrants[migrants$female, ]
+    males <- migrants[!migrants$female, ]
 
     # Only spawn if there are both females and males alive
     if (nrow(females) > 0 && nrow(males) > 0) {
@@ -245,7 +245,7 @@ spawning <- function(mID, population, juv_per_female) {
 #' @param year Year in simulation
 #' @param season Season during year in simulation
 asses_mortality <- function(population, year, season) {
-    unalived <- population[!population$alive,]
+    unalived <- population[!population$alive, ]
     if (nrow(unalived) > 0) {
         unalived$year <- year
         unalived$season <- season
@@ -316,7 +316,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         # Take a snapshot of the population if snap is TRUE
         if (snap == TRUE) {
             # Saves living individuals in snapshot
-            snapshot <- population[population$alive == TRUE,]
+            snapshot <- population[population$alive == TRUE, ]
             snapshot$year <- t
             history <- rbind(history, snapshot)
         }
@@ -377,7 +377,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1000,
+    max_time = 10000,
     juv_mort = 0.574,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
