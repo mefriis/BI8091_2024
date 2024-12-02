@@ -219,8 +219,9 @@ autmn_migration <- function(population, mig_mort_base) {
 #' Spawning
 #' @param population data.frame with columns id, stage, length and alive
 #' @param juv_per_female Juvenile Fish per Spawning Female
+#' @param redd_cap Maximum number of reds avaible for spawning
 #' @return Updated population
-spawning <- function(mID, population, juv_per_female) {
+spawning <- function(mID, population, juv_per_female, redd_cap) {
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
@@ -233,7 +234,15 @@ spawning <- function(mID, population, juv_per_female) {
     if (nrow(females) > 0 && nrow(males) > 0) {
         print("Spawning")
         # Define the number of new juveniles
-        num_new_juveniles <- nrow(females) * juv_per_female
+        number_of_females <- nrow(females)
+
+        if (number_of_females > redd_cap) {
+            num_new_juveniles <- redd_cap * juv_per_female
+        } else {
+            num_new_juveniles <- nrow(females) * juv_per_female
+
+        }
+
 
         # Create new juveniles data frame
         new_juveniles <- data.frame(
@@ -297,6 +306,7 @@ asses_count <- function(population, year, season) {
 #' @param flow_th Flow Threshold for Ice Hatch Migrations, flow-rate
 #' @param turb_mort_base Turbine Base Mortatily, function
 #' @param juv_per_female Juvenile Fish per Spawning Female
+#' @param redd_cap Maximum number of reds avaible for spawning
 #' @param undertaker Save the unalived Fish, data.frame
 #' @param snap Take a snapshot of the population after each winter if TRUE
 #' @param count Count the number of fish in each stage if TRUE
@@ -304,7 +314,7 @@ asses_count <- function(population, year, season) {
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, turb_mort_base, juv_per_female,
-    undertaker, snap, count
+    redd_cap, undertaker, snap, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -378,7 +388,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         }
 
         ### Spawning
-        population <- spawning(mID, population, juv_per_female)
+        population <- spawning(mID, population, juv_per_female, redd_cap)
 
         # Check if population is extinct
         if (nrow(population) == 0) {
@@ -405,6 +415,7 @@ pops <- simulation(
     flow_th = 10,
     turb_mort_base = 0.2,
     juv_per_female = 70,
+    redd_cap = 2000,
     undertaker = FALSE,
     snap = FALSE,
     count = TRUE
