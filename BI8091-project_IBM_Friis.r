@@ -70,7 +70,7 @@ juvnile_growth <- function(n) {
 juvenile_mortality <- function(n) {
     base_mortality <- rnorm(1, mean = 0.45, sd = 0.1)
     base_mortality <- pmax(base_mortality, 0) # Mortality cannot be negative
-    density_dependent <- 0 + (1 / 100000) * n # 0 at n=0, and 0.2 at n=10000
+    density_dependent <- (n / 25000)^2 
     return(base_mortality + density_dependent)
 }
 
@@ -413,7 +413,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 pops <- simulation(
     num_fish = 10000,
     max_time = 1000,
-    juv_mort = 0.574,
+    juv_mort = 0.5,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
     sea_mort = 0.2,
@@ -422,7 +422,7 @@ pops <- simulation(
     },
     flow = 11,
     flow_th = 10,
-    flow_flux = FALSE,
+    flow_flux = TRUE,
     turb_mort_base = 0.2,
     juv_per_female = 70,
     redd_cap = 150,
@@ -437,6 +437,9 @@ result  %>%
     ggplot(aes(x = year, y = juveniles)) +
     geom_line() + geom_line(aes(y = migrants), color = "blue") +
     labs(title = "Fish Population", x = "Year", y = "Number of Fish")
+
+result  %>% filter(season == "winter") %>%
+    ggplot(aes(x = year, y = migrants)) + geom_line(aes(y = migrants))
 
 hist(result$juveniles)
 
