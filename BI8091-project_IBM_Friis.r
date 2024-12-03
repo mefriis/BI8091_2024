@@ -412,7 +412,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1000,
+    max_time = 10000,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
@@ -436,20 +436,27 @@ result  %>%
     filter(season == "winter") %>%
     ggplot(aes(x = year, y = juveniles)) +
     geom_line() + geom_line(aes(y = migrants), color = "blue") +
-    labs(title = "Fish Population", x = "Year", y = "Number of Fish")
+    labs(title = "Fish Population", x = "Year", y = "Number of Fish") +
+    theme_minimal()
 
 result  %>% filter(season == "winter") %>%
     ggplot(aes(x = year, y = migrants)) + geom_line(aes(y = migrants))
 
 hist(result$juveniles)
+hist(result$migrants)
+hist(pop$length[pop$stage == "juvenile"])
+hist(pop$length[pop$stage == "migrant"])
 
 pop <- pops$population
 ded <- pops$unalived
 history <- pops$history
 result <- pops$result
-result
 
-hist
+## TODO
+# Undertaker for migrants only
+# Snapshots for migrants only
+# Function of extreme flow taking out fish at a given time interval
+
 
 plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
 
