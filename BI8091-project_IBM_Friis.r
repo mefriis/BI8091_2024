@@ -304,6 +304,8 @@ asses_count <- function(population, year, season) {
 #' @param growth_mig Growth of Migrants, length in cm
 #' @param flow Flow in River, flow-rate
 #' @param flow_th Flow Threshold for Ice Hatch Migrations, flow-rate
+#' @param flow_flux True if flow is to vary, boolean.
+#' If False, flow is constant. If True, flow is normal distributed around value of **flow**
 #' @param turb_mort_base Turbine Base Mortatily, function
 #' @param juv_per_female Juvenile Fish per Spawning Female
 #' @param redd_cap Maximum number of reds avaible for spawning
@@ -313,8 +315,8 @@ asses_count <- function(population, year, season) {
 #' @return
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base,
-    sea_mort, growth_juv, growth_mig, flow, flow_th, turb_mort_base, juv_per_female,
-    redd_cap, undertaker, snap, count
+    sea_mort, growth_juv, growth_mig, flow, flow_th, flow_flux, turb_mort_base,
+    juv_per_female, redd_cap, undertaker, snap, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -353,7 +355,14 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         }
 
         ### Spring migration
-        population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
+        if (flow_flux == TRUE) {
+            fluxed_flow <- rnorm(1, mean = flow, sd = 3)
+            population <- spring_migration(population, fluxed_flow, mig_mort_base, turb_mort_base, flow_th)
+            print(paste("Flow:", fluxed_flow))
+        } else {
+            population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
+        }
+
         # Assess mortality
         if  (undertaker == TRUE) {
             unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
@@ -413,17 +422,21 @@ pops <- simulation(
     },
     flow = 11,
     flow_th = 10,
+    flow_flux = FALSE,
     turb_mort_base = 0.2,
     juv_per_female = 70,
-    redd_cap = 2000,
+    redd_cap = 150,
     undertaker = FALSE,
     snap = FALSE,
     count = TRUE
 )
 
 result <- pops$result
-plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
-plot(result$year, result$juveniles, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
+result  %>%
+    filter(season == "winter") %>%
+    ggplot(aes(x = year, y = juveniles)) +
+    geom_line() + geom_line(aes(y = migrants), color = "blue") +
+    labs(title = "Fish Population", x = "Year", y = "Number of Fish")
 
 hist(result$juveniles)
 
