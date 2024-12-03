@@ -39,7 +39,7 @@ hgd_view()
 #' @return data.frame with columns id, stage, length and alive
 #' @param n Number of fish
 initialize_population <- function(n) {
-    stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.95, 0.05))
+    stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.96, 0.04))
     lengths <- ifelse(
         stages == "juvenile", pmax(rnorm(n, mean = 5, sd = 7), 5), rnorm(n, mean = 62.5, sd = 30)
     )
@@ -413,18 +413,18 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 pops <- simulation(
     num_fish = 10000,
     max_time = 1000,
-    juv_mort = 0.5,
+    juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.05,
-    sea_mort = 0.2,
+    sea_mort = 0.1,
     growth_mig = function() {
         return(sample(5:15, 1))
     },
     flow = 11,
     flow_th = 10,
-    flow_flux = TRUE,
+    flow_flux = FALSE,
     turb_mort_base = 0.2,
-    juv_per_female = 70,
+    juv_per_female = 50,
     redd_cap = 150,
     undertaker = FALSE,
     snap = FALSE,
