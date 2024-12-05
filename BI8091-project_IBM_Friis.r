@@ -81,7 +81,7 @@ update_living_juveniles <- function(juveniles) {
     current_mortality_rate <- juvenile_density_mortality(sum(juveniles$alive))
     # Apply mortality
     juveniles$alive <- runif(nrow(juveniles)) > current_mortality_rate
-    
+
     return(juveniles)
 }
 
@@ -279,7 +279,6 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
 
         }
 
-
         # Create new juveniles data frame
         new_juveniles <- data.frame(
             id = mID + 1:num_new_juveniles,
@@ -416,7 +415,6 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         } else {
             population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
             print(nrow(population))
-
         }
 
         # Assess mortality
@@ -523,16 +521,9 @@ result <- pops$result
 # Snapshots for migrants only
 # Function of extreme flow taking out fish at a given time interval
 
+### Evo-modell
+# Legge til en genetisk komponent som gir fisk en sannsynelighet for å velge en av to migrasjonstidspunkter
+# Høsten: Større dødelighet som er fast
+# Våren: Lavere dødelighet, men som med et tidsintervall er veldig mye høyere enn ved høsten
 
-plot(result$year, result$migrants, type = "l", col = "blue", xlab = "Year", ylab = "Number of Fish", main = "Fish Population")
-
-sum(pop$stage == "migrant")
-sum(pop$stage == "juvenile")
-
-boxplot(ded$length ~ ded$season, main = "Dead Fish Length Distribution", xlab = "Season", ylab = "Length (cm)")
-sum(ded$season == "winter")
-sum(ded$season == "spring")
-sum(ded$season == "summer")
-sum(ded$season == "autmn")
-hist(pop$length, breaks = 100, main = "Fish Length Distribution", xlab = "Length (cm)")
-str(pop)
+# Gjøre det om til en aseksuell modell hvor det kun modelleres hunner
