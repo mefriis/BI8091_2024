@@ -205,7 +205,7 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     # Combine remaining juveniles and migrants back into the population
     population <- rbind(remaining_juveniles, migrants, aldready_migrating_migrants)
-  
+
     return(population)
 }
 
@@ -267,10 +267,12 @@ autmn_migration <- function(population, mig_mort_base) {
 #' @param juv_per_female Juvenile Fish per Spawning Female
 #' @param redd_cap Maximum number of reds avaible for spawning
 #' @return Updated population
-spawning <- function(mID, population, juv_per_female, redd_cap) {
+spawning <- function(mID, population, juv_per_female, redd_cap, mutation_sd) {
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
+    migrants <- migrants[order(migrants$length), ]
+
 
     # Only spawn if there are both females and males alive
     if (nrow(migrants) > 0) {
@@ -281,15 +283,17 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
             num_new_juveniles <- redd_cap * juv_per_female
         } else {
             num_new_juveniles <- nrow(migrants) * juv_per_female
-
         }
+
+        # Get genes for new juveniles
+        genes <- next_gen_genes(migrants, redd_cap, juv_per_female, num_new_juveniles, mutation_sd)
 
         # Create new juveniles data frame
         new_juveniles <- data.frame(
             id = mID + 1:num_new_juveniles,
             stage = rep("juvenile", num_new_juveniles),
             length = rnorm(num_new_juveniles, mean = 2, sd = 0.25),
-            gene = 0.5,
+            gene = genes,
             alive = TRUE,
             migrating = FALSE
         )
@@ -304,6 +308,29 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
     }
 
     return(population)
+}
+
+#' Next Generation Genes
+#' @param migrants data.frame with columns id, stage, length and alive
+#' @param redd_cap Maximum number of reds avaible for spawning
+#' @param juv_per_female Juvenile Fish per Spawning
+#' @param num_new_juveniles Number of new juveniles
+next_gen_genes <- function(migrants, redd_cap, juv_per_female, num_new_juveniles, mutation_sd) {
+    genes <- migrants$gene[1:redd_cap]
+    genes <- rep(genes, each = juv_per_female)
+    genes <- genes[1:num_new_juveniles] # Slice to correct length if to long
+    genes <- mutate_genes(genes, mutation_sd)
+    return(genes)
+}
+
+#' Mutate Genes
+#' @param genes Genes to mutate
+#' @param mutation_sd Standard deviation of mutation
+#' @return Mutated genes
+mutate_genes <- function(genes, mutation_sd) {
+    mutation <- rnorm(length(genes), mean = 0, sd = mutation_sd)
+    genes <- genes + mutation
+    return(genes)
 }
 
 #' Post Spawning Migration for some migrants returning to sea after spawning
@@ -393,7 +420,7 @@ flood <- function(population) {
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base, post_spawn_mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, flow_flux, turb_mort_base,
-    juv_per_female, redd_cap, flood_interval, flood_interval_th, undertaker, snap, count
+    juv_per_female, mutation_sd, redd_cap, flood_interval, flood_interval_th, undertaker, snap, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -474,7 +501,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         population <- autmn_migration(population, mig_mort_base)
 
         ### Spawning
-        population <- spawning(mID, population, juv_per_female, redd_cap)
+        population <- spawning(mID, population, juv_per_female, redd_cap, mutation_sd)
 
         ### Post Spawning Migration
         population <- post_spawning_migration(population, post_spawn_mig_mort_base)
@@ -501,7 +528,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1,
+    max_time = 10,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
@@ -514,8 +541,9 @@ pops <- simulation(
     flow_th = 10,
     flow_flux = FALSE,
     turb_mort_base = 0.1,
-    juv_per_female = 30,
-    redd_cap = 100,
+    juv_per_female = 10,
+    mutation_sd = 0.1,
+    redd_cap = 300,
     flood_interval = 0,
     flood_interval_th = 500,
     undertaker = FALSE,
@@ -524,6 +552,8 @@ pops <- simulation(
 )
 
 result <- pops$result
+pop <- pops$population
+
 result  %>%
     filter(season == "winter") %>%
     ggplot(aes(x = year, y = juveniles)) +
@@ -546,8 +576,9 @@ result  %>% filter(season == "winter") %>%
 
 hist(pop$length[pop$stage == "juvenile"])
 hist(pop$length[pop$stage == "migrant"])
+hist(pop$gene)
 
-pop <- pops$population
+
 ded <- pops$unalived
 history <- pops$history
 result <- pops$result
@@ -561,5 +592,6 @@ result <- pops$result
 # Legge til en genetisk komponent som gir fisk en sannsynelighet for å velge en av to migrasjonstidspunkter
 # Høsten: Større dødelighet som er fast
 # Våren: Lavere dødelighet, men som med et tidsintervall er veldig mye høyere enn ved høsten
-
+# Endre flood funksjonen til å kun ta ut migranter som er i elven på våren
 # Gjøre det om til en aseksuell modell hvor det kun modelleres hunner
+# Cap gene at 0 and 1
