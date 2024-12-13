@@ -41,19 +41,20 @@ hgd_view()
 initialize_population <- function(n) {
     stages <- sample(c("juvenile", "migrant"), n, replace = TRUE, prob = c(0.96, 0.04))
     lengths <- ifelse(
-        stages == "juvenile", pmax(rnorm(n, mean = 5, sd = 7), 5), rnorm(n, mean = 62.5, sd = 30)
+        stages == "juvenile", pmax(rnorm(n, mean = 5, sd = 7), 5), pmax(rnorm(n, mean = 55, sd = 20), 15)
     )
-    females <- sample(c(TRUE, FALSE), n, replace = TRUE, prob = c(0.5, 0.5))
+    genes <- runif(n, min = 0, max = 1)
 
     data.frame(
         id = 1:n,
         stage = stages,
         length = lengths,
-        female = females,
-        alive = TRUE
+        gene = genes,
+        alive = TRUE,
+        migrating = FALSE
     )
 }
-
+pop <- initialize_population(10000)
 #' Juvenile growth
 #' @param n Number of juvenile fish
 #' @return Growth of juvenile fish dependent on density
@@ -95,7 +96,7 @@ migrant_density_mortality <- function(n) {
     return(base_mortality + density_dependent)
 }
 
-# Update the migrants' alive status dynamically
+# Update the migrants' alive status dynamically based on density
 update_living_migrants <- function(migrants) {
     for (i in seq_len(nrow(migrants))) {
         current_mortality_rate <- migrant_density_mortality(sum(migrants$alive))
@@ -171,6 +172,11 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     #### Calculate mortality rate for migrants
     # Mortality rate is a function of base mortality and length
+
+    migrants <- migrants[!migrants$migrating, ]
+    aldready_migrating_migrants <- migrants[migrants$migrating, ]
+
+    # Calculate mortality rate for migrants
     migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
     # Limit mortality rate to 1
     migrants$mortality_rate <- pmin(migrants$mortality_rate, 1)
@@ -198,7 +204,8 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
     migrants$mortality_rate <- NULL
 
     # Combine remaining juveniles and migrants back into the population
-    population <- rbind(remaining_juveniles, migrants)
+    population <- rbind(remaining_juveniles, migrants, aldready_migrating_migrants)
+  
     return(population)
 }
 
@@ -212,6 +219,9 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
+
+    # Set migration status for migrants
+    migrants$migrating <- FALSE
 
     n_juv <- sum(juveniles$alive)
     print(paste("Number of juveniles:", n_juv))
@@ -233,7 +243,7 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     return(population)
 }
 
-#' Autmn Migration
+#' Autmn Migration for Migrants returning to the river
 #' @param population data.frame with columns id, stage, length and alive
 #' @param mig_mort_base Base Mortality for Migrants, factor
 #' @return Updated population
@@ -262,20 +272,15 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
-    #### Assess which migrants can spawn
-    females <- migrants[migrants$female, ]
-    males <- migrants[!migrants$female, ]
-
     # Only spawn if there are both females and males alive
-    if (nrow(females) > 0 && nrow(males) > 0) {
+    if (nrow(migrants) > 0) {
         print("Spawning")
         # Define the number of new juveniles
-        number_of_females <- nrow(females)
 
-        if (number_of_females > redd_cap) {
+        if (nrow(migrants) > redd_cap) {
             num_new_juveniles <- redd_cap * juv_per_female
         } else {
-            num_new_juveniles <- nrow(females) * juv_per_female
+            num_new_juveniles <- nrow(migrants) * juv_per_female
 
         }
 
@@ -284,8 +289,9 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
             id = mID + 1:num_new_juveniles,
             stage = rep("juvenile", num_new_juveniles),
             length = rnorm(num_new_juveniles, mean = 2, sd = 0.25),
-            female = sample(c(TRUE, FALSE), num_new_juveniles, replace = TRUE),
-            alive = rep(TRUE, num_new_juveniles)
+            gene = 0.5,
+            alive = TRUE,
+            migrating = FALSE
         )
 
         # Combine new juveniles, juveniles and migrants
@@ -297,6 +303,31 @@ spawning <- function(mID, population, juv_per_female, redd_cap) {
         population <- rbind(juveniles, migrants)
     }
 
+    return(population)
+}
+
+#' Post Spawning Migration for some migrants returning to sea after spawning
+#' Changing migration status for post spawning migration migrants and updating alive status
+#' @param population data.frame with columns id, stage, length and alive
+#' @param post_spawn_mig_mort_base Base Mortality for Migrants, factor
+#' @return Updated population
+post_spawning_migration <- function(population, post_spawn_mig_mort_base) {
+    # Identify juveniles and migrants
+    migrants <- population[population$stage == "migrant" & population$alive, ]
+    juveniles <- population[population$stage == "juvenile" & population$alive, ]
+
+    # Fish with gene value below 0.5 have 80% chance of migrating
+    migrate_prob <- ifelse(migrants$gene < 0.5, 0.8, 0.2)
+    migrants$migrating <- runif(nrow(migrants)) < migrate_prob
+
+    migrating_migrants <- migrants[migrants$migrating, ]
+    non_migrating_migrants <- migrants[!migrants$migrating, ]
+
+    # Update alive status for migrating migrants
+    migrating_migrants$alive <- runif(nrow(migrating_migrants)) > post_spawn_mig_mort_base
+
+    # Combine juveniles and migrants
+    population <- rbind(juveniles, migrating_migrants, non_migrating_migrants)
     return(population)
 }
 
@@ -343,6 +374,7 @@ flood <- function(population) {
 #' @param juv_mort Juvenile Bi-Annual Mortality, factor
 #' @param mig_winter_mort Migrants Winter Mortality, factor
 #' @param mig_mort_base Base Mortality for Migrants, factor
+#' @param post_spawn_mig_mort_base Base Mortality for Post Spawning Migrants, factor
 #' @param sea_mort Mortality at Sea, factor
 #' @param growth_juv Growth of Juveniles, Bi-Annual, length in cm
 #' @param growth_mig Growth of Migrants, length in cm
@@ -359,7 +391,7 @@ flood <- function(population) {
 #' @param count Count the number of fish in each stage if TRUE
 #' @return
 #' **population**, data.frame with columns id, stage, length and alive
-simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base,
+simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base, post_spawn_mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, flow_flux, turb_mort_base,
     juv_per_female, redd_cap, flood_interval, flood_interval_th, undertaker, snap, count
 ) {
@@ -440,18 +472,21 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
         ### Autmn migration
         population <- autmn_migration(population, mig_mort_base)
+
+        ### Spawning
+        population <- spawning(mID, population, juv_per_female, redd_cap)
+
+        ### Post Spawning Migration
+        population <- post_spawning_migration(population, post_spawn_mig_mort_base)
+
         # Assess mortality
         if  (undertaker == TRUE) {
             unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
         }
-
         # Count the number of fish in each stage if count is TRUE
         if (count == TRUE) {
             result <- rbind(result, asses_count(population, t, "autmn"))
         }
-
-        ### Spawning
-        population <- spawning(mID, population, juv_per_female, redd_cap)
 
         # Check if population is extinct
         if (nrow(population) == 0) {
@@ -466,10 +501,11 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1000,
+    max_time = 1,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
+    post_spawn_mig_mort_base = 0.3,
     sea_mort = 0.1,
     growth_mig = function() {
         return(rnorm(1, mean = 7, sd = 3))
