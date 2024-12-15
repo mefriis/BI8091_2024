@@ -206,9 +206,12 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     #### Calculate mortality rate for migrants
     # Mortality rate is a function of base mortality and length
+    aldready_migrating_migrants <- migrants[migrants$migrating, ]
+    print(paste("Number of migrants aldready at sea", nrow(aldready_migrating_migrants)))
 
     migrants <- migrants[!migrants$migrating, ]
-    aldready_migrating_migrants <- migrants[migrants$migrating, ]
+    print(paste("Number of spring migrants before migration", nrow(migrants)))
+    
 
     # Calculate mortality rate for migrants
     migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
@@ -236,6 +239,7 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     # Remove mortality rate
     migrants$mortality_rate <- NULL
+    print(paste("Number of spring migrants after migration", nrow(migrants)))
 
     # Combine remaining juveniles and migrants back into the population
     population <- rbind(remaining_juveniles, migrants, aldready_migrating_migrants)
@@ -305,7 +309,7 @@ spawning <- function(mID, population, juv_per_female, redd_cap, mutation_sd) {
     # Identify juveniles and migrants
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
-    migrants <- migrants[order(migrants$length), ]
+    migrants <- migrants[order(migrants$length, decreasing = TRUE), ] # Sort by length, biggest first
 
 
     # Only spawn if there are both females and males alive
@@ -379,15 +383,18 @@ post_spawning_migration <- function(population, post_spawn_mig_mort_base) {
     migrants <- population[population$stage == "migrant" & population$alive, ]
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
 
-    # Fish with gene value below 0.5 have 80% chance of migrating, else 20%
-    migrate_prob <- ifelse(migrants$gene < 0.5, 0.8, 0.2)
+    # Fish with gene value below 0.5 have 75% chance of migrating, else 25%
+    migrate_prob <- ifelse(migrants$gene < 0.5, 0.75, 0.25)
     migrants$migrating <- runif(nrow(migrants)) < migrate_prob
 
     migrating_migrants <- migrants[migrants$migrating, ]
     non_migrating_migrants <- migrants[!migrants$migrating, ]
+    print(paste("Number of migrating migrants:", nrow(migrating_migrants)))
+    print(paste("Number of non-migrating migrants:", nrow(non_migrating_migrants)))
 
     # Update alive status for migrating migrants
     migrating_migrants$alive <- runif(nrow(migrating_migrants)) > post_spawn_mig_mort_base
+    print(paste("Number of alive migrating migrants:", sum(migrating_migrants$alive)))
 
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrating_migrants, non_migrating_migrants)
@@ -449,6 +456,7 @@ flood <- function(population) {
 #' @param juv_per_female Juvenile Fish per Spawning Female
 #' @param redd_cap Maximum number of reds avaible for spawning
 #' @param flood_interval Interval for Flooding, years
+#' @param flood_interval_th Threshold for when flooding starts, years
 #' @param undertaker Save the unalived Fish, data.frame
 #' @param snap Take a snapshot of the population after each winter if TRUE
 #' @param snap_interval Interval for taking snapshots, years
@@ -561,13 +569,19 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
     return(list(population = population, unalived = unalived, history = history, result = result))
 }
 
+# Fish with gene value below 0.5 have 75% chance of migrating post spawning,
+# Fish with gene value above 0.5 will migrate 
+# Post Spawning Migrants: post_spawn_mig_bort_base
+# Spring Migrants: mig_mort_base + turb_mort_base + 0.005 * migrants$length
+# Both: mig_winter_mort and sea_mort
+
 pops <- simulation(
     num_fish = 10000,
-    max_time = 100,
+    max_time = 1000,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
-    post_spawn_mig_mort_base = 0.3,
+    post_spawn_mig_mort_base = 0.25,
     sea_mort = 0.1,
     growth_mig = function() {
         return(rnorm(1, mean = 7, sd = 3))
@@ -583,13 +597,14 @@ pops <- simulation(
     flood_interval_th = 500,
     undertaker = FALSE,
     snap = TRUE,
-    snap_interval = 10,
+    snap_interval = 100,
     count = TRUE
 )
 
 result <- pops$result
 pop <- pops$population
 history <- pops$history
+print_gene_histograms(history, facet = TRUE)
 
 result  %>%
     filter(season == "winter") %>%
@@ -601,15 +616,10 @@ result  %>%
 result %>%
     filter(season == "winter", year >= 700, year <= 800) %>%
     ggplot(aes(x = year, y = juveniles)) +
-    geom_line() + 
+    geom_line() +
     geom_line(aes(y = migrants), color = "blue") +
     labs(title = "Fish Population from Year 700 to 900", x = "Year", y = "Number of Fish") +
     theme_minimal()
-
-result  %>% filter(season == "winter") %>%
-    ggplot(aes(x = year, y = juveniles)) + geom_line(aes(y = juveniles))
-result  %>% filter(season == "winter") %>%
-    ggplot(aes(x = year, y = migrants)) + geom_line(aes(y = migrants))
 
 hist(pop$length[pop$stage == "juvenile"])
 hist(pop$length[pop$stage == "migrant"])
