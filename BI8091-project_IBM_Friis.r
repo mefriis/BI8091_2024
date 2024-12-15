@@ -51,9 +51,15 @@ print_gene_histograms <- function(history, facet) {
     if (facet) {
         p <- ggplot(history, aes(x = gene)) +
             geom_histogram(binwidth = 0.05, fill = "blue", color = "black") +
-            labs(title = "Gene Distribution", x = "Gene Value", y = "Frequency") +
-            theme_minimal() + 
-            facet_wrap(~year, scales = "free_y")
+            labs(title = "Distribution of Gene Value per Interval", x = "Gene Value", y = "Frequency") +
+            theme_minimal() +
+            facet_wrap(~year) +
+            theme(
+                strip.text = element_text(size = 10, margin = margin(t = 10, b = 10)),
+                strip.background = element_blank(),
+                axis.text.x = element_text(angle = 45, hjust = 1),
+                plot.title = element_text(hjust = 0.5)
+            )
         print(p)
     } else {
         for (year in years) {
@@ -66,6 +72,7 @@ print_gene_histograms <- function(history, facet) {
         }
     }
 }
+
 
 ### Simulation ###
 
@@ -425,7 +432,9 @@ asses_count <- function(population, year, season) {
     result$season <- season
     result$juveniles <- sum(population$stage == "juvenile")
     result$migrants <- sum(population$stage == "migrant")
-    result$migrants_female <- sum(population$stage == "migrant" & population$female)
+    result$gene <- mean(population$gene, na.rm = TRUE)
+    result$gene_migration <- mean(population$gene[population$stage == "migrant"], na.rm = TRUE)
+    result$gene_juvenile <- mean(population$gene[population$stage == "juvenile"], na.rm = TRUE)
     return(result)
 }
 
@@ -577,7 +586,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1000,
+    max_time = 10000,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
@@ -588,7 +597,7 @@ pops <- simulation(
     },
     flow = 11,
     flow_th = 10,
-    flow_flux = FALSE,
+    flow_flux = TRUE,
     turb_mort_base = 0.1,
     juv_per_female = 10,
     mutation_sd = 0.1,
@@ -597,7 +606,7 @@ pops <- simulation(
     flood_interval_th = 500,
     undertaker = FALSE,
     snap = TRUE,
-    snap_interval = 100,
+    snap_interval = 1000,
     count = TRUE
 )
 
@@ -605,25 +614,48 @@ result <- pops$result
 pop <- pops$population
 history <- pops$history
 print_gene_histograms(history, facet = TRUE)
+mean_gene <- result %>%
+    filter(season == "autmn") %>%
+    group_by(year) %>%
+    summarize(mean_gene = mean(gene, na.rm = TRUE))
 
-result  %>%
-    filter(season == "winter") %>%
-    ggplot(aes(x = year, y = juveniles)) +
-    geom_line() + geom_line(aes(y = migrants), color = "blue") +
-    labs(title = "Fish Population", x = "Year", y = "Number of Fish") +
-    theme_minimal()
 
 result %>%
-    filter(season == "winter", year >= 700, year <= 800) %>%
-    ggplot(aes(x = year, y = juveniles)) +
-    geom_line() +
-    geom_line(aes(y = migrants), color = "blue") +
-    labs(title = "Fish Population from Year 700 to 900", x = "Year", y = "Number of Fish") +
-    theme_minimal()
+    filter(season == "autmn") %>%
+    ggplot(aes(x = year)) +
+    geom_line(aes(y = juveniles, color = "Juveniles")) +
+    geom_line(aes(y = migrants, color = "Migrants")) +
+    geom_line(data = mean_gene, aes(y = mean_gene * 2000, color = "Mean Gene"), linetype = "dashed") +
+    labs(title = "Population in Autmn", x = "Year", y = "Number of Individuals") +
+    scale_color_manual(values = c("Juveniles" = "black", "Migrants" = "blue", "Mean Gene" = "red"),
+                       name = "Stage",
+                       labels = c("Juveniles", "Mean Gene Value", "Migrants")) +
+    scale_y_continuous(
+        sec.axis = sec_axis(~ . / 2000, name = "Mean Gene Value", breaks = seq(0, 1, by = 0.1))  # Adjust the secondary axis with more ticks
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+result %>%
+    filter(season == "autmn", year >= 700, year <= 800) %>%
+    ggplot(aes(x = year)) +
+    geom_line(aes(y = juveniles, color = "Juveniles")) +
+    geom_line(aes(y = migrants, color = "Migrants")) +
+    labs(title = "Population in Autmn", x = "Year", y = "Number of Individuals") +
+    scale_color_manual(values = c("Juveniles" = "black", "Migrants" = "blue"),
+                        name = "Stage",
+                        labels = c("Juveniles", "Migrants")) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
 
 hist(pop$length[pop$stage == "juvenile"])
 hist(pop$length[pop$stage == "migrant"])
 hist(pop$gene)
+
+hist(history$gene)
+hist(history$length[history$stage == "juvenile"])
+hist(history$length[history$stage == "migrant"])
 
 print_gene_histograms(history, facet = TRUE)
 
