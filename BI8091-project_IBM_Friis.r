@@ -218,7 +218,7 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     migrants <- migrants[!migrants$migrating, ]
     print(paste("Number of spring migrants before migration", nrow(migrants)))
-    
+
 
     # Calculate mortality rate for migrants
     migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
@@ -441,9 +441,17 @@ asses_count <- function(population, year, season) {
 #' Flooding
 #' @param population data.frame with columns id, stage, length and alive
 #' @return Updated population
-flood <- function(population) {
-    population <- population[population$alive, ]
-    population$alive <- runif(nrow(population)) > 0.9
+flood <- function(population, flood_removal) {
+    in_river <- population[population$alive & !population$migrating, ]
+    migrating <- population[population$alive & population$migrating, ]
+
+    print(paste("Before flood: ", sum(in_river$alive)))
+    print(paste("Migrants in sea: ", sum(migrating$alive)))
+        if (nrow(in_river) > 0) {
+        in_river$alive <- runif(nrow(in_river)) > flood_removal
+    }
+    print(paste("After flood: ", sum(in_river$alive)))
+    population <- rbind(in_river, migrating)
     return(population)
 }
 
@@ -466,6 +474,7 @@ flood <- function(population) {
 #' @param redd_cap Maximum number of reds avaible for spawning
 #' @param flood_interval Interval for Flooding, years
 #' @param flood_interval_th Threshold for when flooding starts, years
+#' @param flood_removal Proportion of fish in the river removed by flooding
 #' @param undertaker Save the unalived Fish, data.frame
 #' @param snap Take a snapshot of the population after each winter if TRUE
 #' @param snap_interval Interval for taking snapshots, years
@@ -474,7 +483,8 @@ flood <- function(population) {
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base, post_spawn_mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, flow_flux, turb_mort_base,
-    juv_per_female, mutation_sd, redd_cap, flood_interval, flood_interval_th, undertaker, snap, snap_interval, count
+    juv_per_female, mutation_sd, redd_cap, flood_interval, flood_interval_th, flood_removal, undertaker, snap,
+    snap_interval, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -516,7 +526,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         if (flood_interval > 0 && flood_interval_th <= t && t %% flood_interval == 0) {
             print("Flood")
             print(paste("Before flood: ", sum(population$alive == TRUE)))
-            population <- flood(population)
+            population <- flood(population, flood_removal)
             print(paste("After flood: ",  sum(population$alive == TRUE)))
         }
         if (flow_flux == TRUE) {
@@ -579,34 +589,35 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 }
 
 # Fish with gene value below 0.5 have 75% chance of migrating post spawning,
-# Fish with gene value above 0.5 will migrate 
+# Fish with gene value above 0.5 will have 75% chance of staying in the river and migrating at spring
 # Post Spawning Migrants: post_spawn_mig_bort_base
 # Spring Migrants: mig_mort_base + turb_mort_base + 0.005 * migrants$length
 # Both: mig_winter_mort and sea_mort
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 10000,
+    max_time = 20000,
+    snap = TRUE,
+    snap_interval = 2000,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
-    post_spawn_mig_mort_base = 0.25,
+    post_spawn_mig_mort_base = 0.3,
     sea_mort = 0.1,
     growth_mig = function() {
         return(rnorm(1, mean = 7, sd = 3))
     },
     flow = 11,
     flow_th = 10,
-    flow_flux = TRUE,
+    flow_flux = FALSE,
     turb_mort_base = 0.1,
     juv_per_female = 10,
-    mutation_sd = 0.1,
+    mutation_sd = 0.05,
     redd_cap = 300,
-    flood_interval = 0,
-    flood_interval_th = 500,
+    flood_interval = 25,
+    flood_interval_th = 10000,
+    flood_removal = 0.8,
     undertaker = FALSE,
-    snap = TRUE,
-    snap_interval = 1000,
     count = TRUE
 )
 
@@ -618,6 +629,7 @@ mean_gene <- result %>%
     filter(season == "autmn") %>%
     group_by(year) %>%
     summarize(mean_gene = mean(gene, na.rm = TRUE))
+# vertical_lines <- seq(5000, max(result$year), by = 50)
 
 
 result %>%
@@ -626,6 +638,7 @@ result %>%
     geom_line(aes(y = juveniles, color = "Juveniles")) +
     geom_line(aes(y = migrants, color = "Migrants")) +
     geom_line(data = mean_gene, aes(y = mean_gene * 2000, color = "Mean Gene"), linetype = "dashed") +
+    # geom_vline(xintercept = vertical_lines, linetype = "dotted", color = "black", size = 0.1) + 
     labs(title = "Population in Autmn", x = "Year", y = "Number of Individuals") +
     scale_color_manual(values = c("Juveniles" = "black", "Migrants" = "blue", "Mean Gene" = "red"),
                        name = "Stage",
@@ -636,8 +649,16 @@ result %>%
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
 
+    result %>% 
+        ggplot(aes(x = year)) +
+        geom_line(data = mean_gene, aes(y = mean_gene, color = "Mean Gene"), linetype = "dashed") +
+        # geom_vline(xintercept = vertical_lines, linetype = "dotted", color = "black", size = 0.1) + 
+        labs(title = "Average Gene Value", x = "Year", y = "Number of Individuals") +
+        theme_minimal() +
+        theme(plot.title = element_text(hjust = 0.5))
+
 result %>%
-    filter(season == "autmn", year >= 700, year <= 800) %>%
+    filter(season == "autmn", year >= 400, year <= 600) %>%
     ggplot(aes(x = year)) +
     geom_line(aes(y = juveniles, color = "Juveniles")) +
     geom_line(aes(y = migrants, color = "Migrants")) +
@@ -649,9 +670,6 @@ result %>%
     theme(plot.title = element_text(hjust = 0.5))
 
 
-hist(pop$length[pop$stage == "juvenile"])
-hist(pop$length[pop$stage == "migrant"])
-hist(pop$gene)
 
 hist(history$gene)
 hist(history$length[history$stage == "juvenile"])
@@ -665,9 +683,7 @@ history <- pops$history
 result <- pops$result
 
 ## TODO
-# Undertaker for migrants only
-# Snapshots for migrants only
-# Function of extreme flow taking out fish at a given time interval
+# Function to run the simulation multiple times and and store the counts and snapshots of each run
 
 ### Evo-modell
 # Legge til en genetisk komponent som gir fisk en sannsynelighet for å velge en av to migrasjonstidspunkter
