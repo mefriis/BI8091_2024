@@ -33,6 +33,40 @@ setup_packages()
 hgd()
 hgd_view()
 
+### PRINTS ###
+
+#' Print Histograms for Genes Every 100 Years
+#' @param history Data frame containing the population history
+print_gene_histograms <- function(history, facet) {
+    # Ensure ggplot2 is loaded
+    if (!require(ggplot2)) {
+        install.packages("ggplot2")
+        library(ggplot2)
+    }
+
+    # Find snapshot interval
+    years <- unique(history$year)
+
+    # If facet is TRUE, create a single histogram for all years
+    if (facet) {
+        p <- ggplot(history, aes(x = gene)) +
+            geom_histogram(binwidth = 0.05, fill = "blue", color = "black") +
+            labs(title = "Gene Distribution", x = "Gene Value", y = "Frequency") +
+            theme_minimal() + 
+            facet_wrap(~year, scales = "free_y")
+        print(p)
+    } else {
+        for (year in years) {
+            year_data <- history[history$year == year, ]
+            p <- ggplot(year_data, aes(x = gene)) +
+                geom_histogram(binwidth = 0.05, fill = "blue", color = "black") +
+                labs(title = paste("Gene Distribution in Year", year), x = "Gene Value", y = "Frequency") +
+                theme_minimal()
+            print(p)
+        }
+    }
+}
+
 ### Simulation ###
 
 #' Initialize the population
@@ -319,7 +353,9 @@ next_gen_genes <- function(migrants, redd_cap, juv_per_female, num_new_juveniles
     genes <- migrants$gene[1:redd_cap]
     genes <- rep(genes, each = juv_per_female)
     genes <- genes[1:num_new_juveniles] # Slice to correct length if to long
-    genes <- mutate_genes(genes, mutation_sd)
+    # Cap mutated genes at 0 and 1
+    genes <- pmax(pmin(mutate_genes(genes, mutation_sd), 1), 0)
+
     return(genes)
 }
 
@@ -527,7 +563,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 1000,
+    max_time = 100,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
@@ -547,7 +583,7 @@ pops <- simulation(
     flood_interval_th = 500,
     undertaker = FALSE,
     snap = TRUE,
-    snap_interval = 100,
+    snap_interval = 10,
     count = TRUE
 )
 
@@ -578,6 +614,8 @@ result  %>% filter(season == "winter") %>%
 hist(pop$length[pop$stage == "juvenile"])
 hist(pop$length[pop$stage == "migrant"])
 hist(pop$gene)
+
+print_gene_histograms(history, facet = TRUE)
 
 
 ded <- pops$unalived
