@@ -54,7 +54,7 @@ initialize_population <- function(n) {
         migrating = FALSE
     )
 }
-pop <- initialize_population(10000)
+
 #' Juvenile growth
 #' @param n Number of juvenile fish
 #' @return Growth of juvenile fish dependent on density
@@ -117,7 +117,7 @@ winter_update <- function(population, juv_mort, mig_winter_mort) {
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
     n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles:", n_juv))
+    print(paste("Number of juveniles start winter:", n_juv))
 
     # Assess mortality
     #juveniles$alive <- runif(nrow(juveniles)) > juvenile_density_mortality(n_juv)
@@ -125,7 +125,7 @@ winter_update <- function(population, juv_mort, mig_winter_mort) {
     migrants$alive <- runif(nrow(migrants)) > mig_winter_mort
 
     n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles:", n_juv))
+    print(paste("Number of juveniles end winter:", n_juv))
     # Update lengths
     juveniles$length <- juveniles$length + juvnile_growth(n_juv)
     # Combine juveniles and migrants
@@ -158,7 +158,7 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
         # Combine old and new migrants
         migrants <- rbind(old_migrants, new_migrants)
     }
-    print(paste("Number of migrants:", nrow(migrants)))
+    print(paste("Number of migrants total:", nrow(migrants)))
 
     # Identify remaining juveniles
     remaining_juveniles <-
@@ -224,7 +224,7 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     migrants$migrating <- FALSE
 
     n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles:", n_juv))
+    print(paste("Number of juveniles start summer:", n_juv))
 
     # Assess mortality
     #juveniles$alive <- runif(nrow(juveniles)) > juvenile_density_mortality(n_juv)
@@ -232,7 +232,7 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     migrants$alive <- runif(nrow(migrants)) > sea_mort
 
     n_juv <- sum(juveniles$alive)
-    (print(paste("Number of juveniles:", n_juv)))
+    (print(paste("Number of juveniles end summer:", n_juv)))
 
     # Update lengths
     juveniles$length <- juveniles$length + juvnile_growth(n_juv)
@@ -343,7 +343,7 @@ post_spawning_migration <- function(population, post_spawn_mig_mort_base) {
     migrants <- population[population$stage == "migrant" & population$alive, ]
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
 
-    # Fish with gene value below 0.5 have 80% chance of migrating
+    # Fish with gene value below 0.5 have 80% chance of migrating, else 20%
     migrate_prob <- ifelse(migrants$gene < 0.5, 0.8, 0.2)
     migrants$migrating <- runif(nrow(migrants)) < migrate_prob
 
@@ -415,12 +415,13 @@ flood <- function(population) {
 #' @param flood_interval Interval for Flooding, years
 #' @param undertaker Save the unalived Fish, data.frame
 #' @param snap Take a snapshot of the population after each winter if TRUE
+#' @param snap_interval Interval for taking snapshots, years
 #' @param count Count the number of fish in each stage if TRUE
 #' @return
 #' **population**, data.frame with columns id, stage, length and alive
 simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_base, post_spawn_mig_mort_base,
     sea_mort, growth_juv, growth_mig, flow, flow_th, flow_flux, turb_mort_base,
-    juv_per_female, mutation_sd, redd_cap, flood_interval, flood_interval_th, undertaker, snap, count
+    juv_per_female, mutation_sd, redd_cap, flood_interval, flood_interval_th, undertaker, snap, snap_interval, count
 ) {
     # Initialize population
     population <- initialize_population(num_fish)
@@ -446,7 +447,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         }
 
         # Take a snapshot of the population if snap is TRUE
-        if (snap == TRUE) {
+        if (snap == TRUE && t %% snap_interval == 0) {
             # Saves living individuals in snapshot
             snapshot <- population[population$alive == TRUE, ]
             snapshot$year <- t
@@ -461,19 +462,17 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         ### Spring migration
         if (flood_interval > 0 && flood_interval_th <= t && t %% flood_interval == 0) {
             print("Flood")
-            print(sum(population$alive == TRUE))
+            print(paste("Before flood: ", sum(population$alive == TRUE)))
             population <- flood(population)
-            print(sum(population$alive == TRUE))
+            print(paste("After flood: ",  sum(population$alive == TRUE)))
         }
         if (flow_flux == TRUE) {
             fluxed_flow <- rnorm(1, mean = flow, sd = 3)
             population <- spring_migration(population, fluxed_flow, mig_mort_base, turb_mort_base, flow_th)
             print(paste("Flow:", fluxed_flow))
-            print(nrow(population))
 
         } else {
             population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
-            print(nrow(population))
         }
 
         # Assess mortality
@@ -528,7 +527,7 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
 pops <- simulation(
     num_fish = 10000,
-    max_time = 10,
+    max_time = 1000,
     juv_mort = 0.4,
     mig_winter_mort = 0.1,
     mig_mort_base = 0.1,
@@ -547,12 +546,14 @@ pops <- simulation(
     flood_interval = 0,
     flood_interval_th = 500,
     undertaker = FALSE,
-    snap = FALSE,
+    snap = TRUE,
+    snap_interval = 100,
     count = TRUE
 )
 
 result <- pops$result
 pop <- pops$population
+history <- pops$history
 
 result  %>%
     filter(season == "winter") %>%
