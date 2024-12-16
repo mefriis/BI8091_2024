@@ -219,12 +219,14 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
     aldready_migrating_migrants <- migrants[migrants$migrating, ]
     # Identify migrants that are in the river
     migrants <- migrants[!migrants$migrating, ]
-
-    # Mortality rate is a function of base mortality and length
-    # Calculate mortality rate for migrants
-    migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
-    # Limit mortality rate to 1
-    migrants$mortality_rate <- pmin(migrants$mortality_rate, 1)
+    # Check if migrants data frame is not empty before assigning mortality_rate
+    if (nrow(migrants) > 0) {
+        # Mortality rate is a function of base mortality and length
+        # Calculate mortality rate for migrants
+        migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
+        # Limit mortality rate to 1
+        migrants$mortality_rate <- pmin(migrants$mortality_rate, 1)
+    }
 
     #### Scenarios for migrants depending on flow
     # If flow is below threshold, all migrants must pass the turbine
@@ -265,19 +267,30 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
-    # Set migration status for migrants
-    migrants$migrating <- FALSE
+    # Check if migrants data frame is not empty before assigning migration status
+    if (nrow(migrants) > 0) {
+        # Set migration status for migrants
+        migrants$migrating <- FALSE
+    } else {
+        print("No migrants to update migration status")
+    }
 
     # Assess mortality
     juveniles <- update_living_juveniles(juveniles)
-    migrants$alive <- runif(nrow(migrants)) > sea_mort
+    if (nrow(migrants) > 0) {
+        migrants$alive <- runif(nrow(migrants)) > sea_mort
+    } else {
+        print("No migrants to assess mortality")
+    }
 
     # Number of living juveniles
     n_juv <- sum(juveniles$alive)
 
     # Update lengths
     juveniles$length <- juveniles$length + juvnile_growth(n_juv)
-    migrants$length <- migrants$length + growth_mig()
+    if (nrow(migrants) > 0) {
+        migrants$length <- migrants$length + growth_mig()
+    }
 
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrants)
@@ -299,6 +312,7 @@ autmn_migration <- function(population, mig_mort_base) {
 
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrants)
+
     return(population)
 }
 
@@ -429,6 +443,7 @@ asses_count <- function(population, year, season) {
     #result$season <- season
     result$juveniles <- sum(population$stage == "juvenile")
     result$migrants <- sum(population$stage == "migrant")
+    result$migrants_length <- mean(population$length[population$stage == "migrant"], na.rm = TRUE)
     result$gene <- mean(population$gene, na.rm = TRUE)
     return(result)
 }
@@ -687,7 +702,6 @@ result <- pops$result
 # Gjøre det om til en aseksuell modell hvor det kun modelleres hunner
 # Cap gene at 0 and 1
 
-
 big_run <- function(n) {
     big_res <- list()
     big_hist <- list()
@@ -725,6 +739,8 @@ big_run <- function(n) {
         }, error = function(e) {
             print(paste("Error in run", i, ":", e$message))
         })
+        time <- format(Sys.time(), "%Y%m%d_%H%M%S")
+        file.create(paste0("number-", i, "_", time, ".txt"))
     }
     time <- format(Sys.time(), "%Y%m%d_%H%M%S")
     saveRDS(big_res, file = paste0("big_res_", time, ".rds"))
@@ -733,7 +749,6 @@ big_run <- function(n) {
 }
 
 big <- big_run(20)
-
 
 big_res <- big$result
 big_hist <- big$history
@@ -752,27 +767,36 @@ average_simulation_results <- function(big_res) {
             summarize(
                 mean_gene = mean(gene, na.rm = TRUE),
                 num_juveniles = mean(juveniles, na.rm = TRUE),
-                num_migrants = mean(migrants, na.rm = TRUE)
+                num_migrants = mean(migrants, na.rm = TRUE),
+                migrants_length = mean(migrants_length, na.rm = TRUE)
             )
     }))
-    
+
     # Calculate the average mean gene value, number of juveniles, and number of migrants for each year
     average_results <- combined_results %>%
         group_by(year) %>%
         summarize(
             avg_mean_gene = mean(mean_gene, na.rm = TRUE),
             avg_num_juveniles = mean(num_juveniles, na.rm = TRUE),
-            avg_num_migrants = mean(num_migrants, na.rm = TRUE)
+            avg_num_migrants = mean(num_migrants, na.rm = TRUE),
+            avg_mig_length = mean(migrants_length, na.rm = TRUE)
+
         )
-    
+
     return(average_results)
 }
 
 average_results <- average_simulation_results(big_res)
 
-# Split the data into before and after 10000 years
+# Set the period variable based on the specified year ranges
 average_results <- average_results %>%
-    mutate(period = ifelse(year < 10000, "Before 10000", "After 10000"))
+    mutate(period = case_when(
+        year >= 1000 & year < 10000 ~ "Before floodings",
+        year > 11000 & year <= 20000 ~ "After floodings",
+        TRUE ~ "None"
+    ))
+
+average_results$period <- factor(average_results$period, levels = c("Before floodings", "After floodings"))
 
 
 ### Plot population at autmn counts
@@ -803,71 +827,110 @@ average_results %>%
 
 
 # Split the data into before and after 10000 years
-before_10000_gene <- average_results %>%
-    filter(year < 10000) %>%
+before_f_gene <- average_results %>%
+    filter(period == "Before floodings") %>%
     pull(avg_mean_gene)
 
-after_10000_gene <- average_results %>%
-    filter(year >= 10000) %>%
+after_f_gene <- average_results %>%
+    filter(period == "After floodings") %>%
     pull(avg_mean_gene)
 
 # Perform a t-test
-t_test_gene <- t.test(before_10000_gene, after_10000_gene)
+t_test_gene <- t.test(before_f_gene, after_f_gene)
 
 # Split the data into before and after 10000 years and test for juv counts
-before_10000_juv <- average_results %>%
-    filter(year < 10000) %>%
+before_f_juv <- average_results %>%
+    filter(period == "Before floodings") %>%
     pull(avg_num_juveniles)
 
-after_10000_juv <- average_results %>%
-    filter(year >= 10000) %>%
+after_f_juv <- average_results %>%
+    filter(period == "After floodings") %>%
     pull(avg_num_juveniles)
 
 # Perform a t-test
-t_test_juv <- t.test(before_10000_juv, after_10000_juv)
+t_test_juv <- t.test(before_f_juv, after_f_juv)
 
 # Split the data into before and after 10000 years and test for migrant counts
-before_10000_mig <- average_results %>%
-    filter(year < 10000) %>%
+before_f_mig <- average_results %>%
+    filter(period == "Before floodings") %>%
     pull(avg_num_migrants)
 
-after_10000_mig <- average_results %>%
-    filter(year >= 10000) %>%
+after_f_mig <- average_results %>%
+    filter(period == "After floodings") %>%
     pull(avg_num_migrants)
 
 # Perform a t-test
-t_test_mig <- t.test(before_10000_mig, after_10000_mig)
+t_test_mig <- t.test(before_f_mig, after_f_mig)
+
+# Split the data into before and after 10000 years and test for migrant length
+before_f_mig_length <- average_results %>%
+    filter(period == "Before floodings") %>%
+    pull(avg_mig_length)
+
+after_f_mig_length <- average_results %>%
+    filter(period == "After floodings") %>%
+    pull(avg_mig_length)
+
+# Perform a t-test
+t_test_mig_length <- t.test(before_f_mig_length, after_f_mig_length)
 
 # Create a data frame to store the t-test results
 t_test_results <- bind_rows(
     tidy(t_test_gene) %>% mutate(test = "Gene Values"),
     tidy(t_test_juv) %>% mutate(test = "Juvenile Counts"),
-    tidy(t_test_mig) %>% mutate(test = "Migrant Counts")
+    tidy(t_test_mig) %>% mutate(test = "Migrant Counts"),
+    tidy(t_test_mig_length) %>% mutate(test = "Migrant Length")
 )
 
 # Print the t-test results table
 print(t_test_results)
 
 # Boxplot and Violin plot for gene values
-ggplot(average_results, aes(x = period, y = avg_mean_gene, fill = period)) +
+ggplot(average_results %>%
+    filter(year >= 1000) %>%
+    filter(year < 10000 | year > 11000), aes(x = period, y = avg_mean_gene, fill = period)) +
     geom_violin(trim = FALSE, alpha = 0.5) +
     geom_boxplot(width = 0.1, outlier.shape = NA) +
-    labs(title = "Gene Values Before and After 10000 Years", x = "Period", y = "Average Mean Gene Value") +
+    labs(title = "Gene Values Before and After Floodings", x = "Period", y = "Average Mean Gene Value") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
 
 # Boxplot and Violin plot for juvenile counts
-ggplot(average_results, aes(x = period, y = avg_num_juveniles, fill = period)) +
+ggplot(average_results %>%
+    filter(year >= 1000) %>%
+    filter(year < 10000 | year > 11000), aes(x = period, y = avg_num_juveniles, fill = period)) +
     geom_violin(trim = FALSE, alpha = 0.5) +
     geom_boxplot(width = 0.1, outlier.shape = NA) +
-    labs(title = "Juvenile Counts Before and After 10000 Years", x = "Period", y = "Average Number of Juveniles") +
+    labs(title = "Juvenile Counts Before and After Floodings", x = "Period", y = "Average Number of Juveniles") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
 
 # Boxplot and Violin plot for migrant counts
-ggplot(average_results, aes(x = period, y = avg_num_migrants, fill = period)) +
+ggplot(average_results %>%
+    filter(year >= 1000) %>%
+    filter(year < 10000 | year > 11000), aes(x = period, y = avg_num_migrants, fill = period)) +
     geom_violin(trim = FALSE, alpha = 0.5) +
     geom_boxplot(width = 0.1, outlier.shape = NA) +
-    labs(title = "Migrant Counts Before and After 10000 Years", x = "Period", y = "Average Number of Migrants") +
+    labs(title = "Migrant Counts Before and After Floodings", x = "Period", y = "Average Number of Migrants") +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot and Violin plot for migrant length
+ggplot(average_results %>%
+    filter(year >= 1000) %>%
+    filter(year < 10000 | year > 11000), aes(x = period, y = avg_mig_length, fill = period)) +
+    geom_violin(trim = FALSE, alpha = 0.5) +
+    geom_boxplot(width = 0.1, outlier.shape = NA) +
+    labs(title = "Migrant Length Before and After Floodings", x = "Period", y = "Average Migrant Length") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+### Population Snapshots
+
+# Combine all data frames into one and add a 'run' variable
+combined_hist <- bind_rows(lapply(seq_along(big_hist), function(i) {
+    big_hist[[i]] %>%
+        mutate(run = i)
+}))
+
+print_gene_histograms(combined_hist, facet = TRUE)
