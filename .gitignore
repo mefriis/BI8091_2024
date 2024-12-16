@@ -36,4 +36,5 @@ data/modified_data
 .RDataTmp3
 
 *.RData
+*.rds
 testIgnore.r
