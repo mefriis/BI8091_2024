@@ -620,38 +620,39 @@ mean_gene <- result %>%
     filter(season == "autmn") %>%
     group_by(year) %>%
     summarize(mean_gene = mean(gene, na.rm = TRUE))
-# vertical_lines <- seq(5000, max(result$year), by = 50)
 
-
+### Plot population at autmn counts
 result %>%
     filter(season == "autmn") %>%
     ggplot(aes(x = year)) +
     geom_line(aes(y = juveniles, color = "Juveniles")) +
     geom_line(aes(y = migrants, color = "Migrants")) +
     geom_line(data = mean_gene, aes(y = mean_gene * 2000, color = "Mean Gene"), linetype = "dashed") +
-    # geom_vline(xintercept = vertical_lines, linetype = "dotted", color = "black", size = 0.1) + 
+    geom_vline(xintercept = 10000, linetype = "longdash", color = "salmon", size = 1) + 
     labs(title = "Population in Autmn", x = "Year", y = "Number of Individuals") +
     scale_color_manual(values = c("Juveniles" = "black", "Migrants" = "blue", "Mean Gene" = "red"),
                        name = "Stage",
                        labels = c("Juveniles", "Mean Gene Value", "Migrants")) +
     scale_y_continuous(
-        sec.axis = sec_axis(~ . / 2000, name = "Mean Gene Value", breaks = seq(0, 1, by = 0.1))  # Adjust the secondary axis with more ticks
+        sec.axis = sec_axis(~ . / 2000, name = "Mean Gene Value", breaks = seq(0, 1, by = 0.1))
     ) +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
 
-    result %>% 
-        ggplot(aes(x = year)) +
-        geom_line(data = mean_gene, aes(y = mean_gene, color = "Mean Gene"), linetype = "dashed") +
-        # geom_vline(xintercept = vertical_lines, linetype = "dotted", color = "black", size = 0.1) + 
-        labs(title = "Average Gene Value", x = "Year", y = "Number of Individuals") +
-        theme_minimal() +
-        theme(plot.title = element_text(hjust = 0.5))
+### Plot yearly mean gene value
+result %>%
+    ggplot(aes(x = year)) +
+    geom_line(data = mean_gene, aes(y = mean_gene), linetype = "dashed") +
+    geom_vline(xintercept = 10000, linetype = "longdash", color = "salmon", size = 1) + 
+    labs(title = "Average Gene Value", x = "Year", y = "Number of Individuals") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
 
 hist(history$gene)
 hist(history$length[history$stage == "juvenile"])
 hist(history$length[history$stage == "migrant"])
 
+### Plot at time interval
 result %>%
     filter(season == "autmn", year >= 400, year <= 600) %>%
     ggplot(aes(x = year)) +
@@ -663,8 +664,6 @@ result %>%
                         labels = c("Juveniles", "Migrants")) +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
-
-print_gene_histograms(history, facet = TRUE)
 
 
 ded <- pops$unalived
