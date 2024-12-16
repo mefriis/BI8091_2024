@@ -157,16 +157,14 @@ winter_update <- function(population, juv_mort, mig_winter_mort) {
     juveniles <- population[population$stage == "juvenile" & population$alive, ]
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
-    n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles start winter:", n_juv))
-
     # Assess mortality
     #juveniles$alive <- runif(nrow(juveniles)) > juvenile_density_mortality(n_juv)
     juveniles <- update_living_juveniles(juveniles)
     migrants$alive <- runif(nrow(migrants)) > mig_winter_mort
 
+    # Number of living juveniles
     n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles end winter:", n_juv))
+
     # Update lengths
     juveniles$length <- juveniles$length + juvnile_growth(n_juv)
     # Combine juveniles and migrants
@@ -212,14 +210,12 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
     remaining_juveniles <- update_living_juveniles(remaining_juveniles)
 
     #### Calculate mortality rate for migrants
-    # Mortality rate is a function of base mortality and length
+    # Identify migrants that are already migrating and currently not in the river
     aldready_migrating_migrants <- migrants[migrants$migrating, ]
-    print(paste("Number of migrants aldready at sea", nrow(aldready_migrating_migrants)))
-
+    # Identify migrants that are in the river
     migrants <- migrants[!migrants$migrating, ]
-    print(paste("Number of spring migrants before migration", nrow(migrants)))
 
-
+    # Mortality rate is a function of base mortality and length
     # Calculate mortality rate for migrants
     migrants$mortality_rate <- mig_mort_base + turb_mort_base + 0.005 * migrants$length
     # Limit mortality rate to 1
@@ -246,7 +242,6 @@ spring_migration <- function(population, flow, mig_mort_base, turb_mort_base, fl
 
     # Remove mortality rate
     migrants$mortality_rate <- NULL
-    print(paste("Number of spring migrants after migration", nrow(migrants)))
 
     # Combine remaining juveniles and migrants back into the population
     population <- rbind(remaining_juveniles, migrants, aldready_migrating_migrants)
@@ -268,16 +263,12 @@ summer_update <- function(population, juv_mort, sea_mort, growth_mig) {
     # Set migration status for migrants
     migrants$migrating <- FALSE
 
-    n_juv <- sum(juveniles$alive)
-    print(paste("Number of juveniles start summer:", n_juv))
-
     # Assess mortality
-    #juveniles$alive <- runif(nrow(juveniles)) > juvenile_density_mortality(n_juv)
     juveniles <- update_living_juveniles(juveniles)
     migrants$alive <- runif(nrow(migrants)) > sea_mort
 
+    # Number of living juveniles
     n_juv <- sum(juveniles$alive)
-    (print(paste("Number of juveniles end summer:", n_juv)))
 
     # Update lengths
     juveniles$length <- juveniles$length + juvnile_growth(n_juv)
@@ -298,7 +289,6 @@ autmn_migration <- function(population, mig_mort_base) {
     migrants <- population[population$stage == "migrant" & population$alive, ]
 
     # Assess mortality
-    # migrants$alive <- runif(nrow(migrants)) > migrant_density_mortality(nrow(migrants))
     juveniles <- update_living_juveniles(juveniles)
     migrants <- update_living_migrants(migrants)
 
@@ -360,6 +350,7 @@ spawning <- function(mID, population, juv_per_female, redd_cap, mutation_sd) {
 #' @param redd_cap Maximum number of reds avaible for spawning
 #' @param juv_per_female Juvenile Fish per Spawning
 #' @param num_new_juveniles Number of new juveniles
+#' @param mutation_sd Standard deviation of mutation
 next_gen_genes <- function(migrants, redd_cap, juv_per_female, num_new_juveniles, mutation_sd) {
     genes <- migrants$gene[1:redd_cap]
     genes <- rep(genes, each = juv_per_female)
@@ -394,14 +385,12 @@ post_spawning_migration <- function(population, post_spawn_mig_mort_base) {
     migrate_prob <- ifelse(migrants$gene < 0.5, 0.75, 0.25)
     migrants$migrating <- runif(nrow(migrants)) < migrate_prob
 
+    # Identify migrating and non-migrating migrants
     migrating_migrants <- migrants[migrants$migrating, ]
     non_migrating_migrants <- migrants[!migrants$migrating, ]
-    print(paste("Number of migrating migrants:", nrow(migrating_migrants)))
-    print(paste("Number of non-migrating migrants:", nrow(non_migrating_migrants)))
 
     # Update alive status for migrating migrants
     migrating_migrants$alive <- runif(nrow(migrating_migrants)) > post_spawn_mig_mort_base
-    print(paste("Number of alive migrating migrants:", sum(migrating_migrants$alive)))
 
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrating_migrants, non_migrating_migrants)
@@ -445,12 +434,14 @@ flood <- function(population, flood_removal) {
     in_river <- population[population$alive & !population$migrating, ]
     migrating <- population[population$alive & population$migrating, ]
 
-    print(paste("Before flood: ", sum(in_river$alive)))
+    print(paste("Migrants in the river before flood: ", sum(in_river$alive)))
     print(paste("Migrants in sea: ", sum(migrating$alive)))
-        if (nrow(in_river) > 0) {
+
+    if (nrow(in_river) > 0) {
         in_river$alive <- runif(nrow(in_river)) > flood_removal
     }
-    print(paste("After flood: ", sum(in_river$alive)))
+    print(paste("Migrants in the river after flood: ", sum(in_river$alive)))
+
     population <- rbind(in_river, migrating)
     return(population)
 }
@@ -657,6 +648,10 @@ result %>%
         theme_minimal() +
         theme(plot.title = element_text(hjust = 0.5))
 
+hist(history$gene)
+hist(history$length[history$stage == "juvenile"])
+hist(history$length[history$stage == "migrant"])
+
 result %>%
     filter(season == "autmn", year >= 400, year <= 600) %>%
     ggplot(aes(x = year)) +
@@ -668,12 +663,6 @@ result %>%
                         labels = c("Juveniles", "Migrants")) +
     theme_minimal() +
     theme(plot.title = element_text(hjust = 0.5))
-
-
-
-hist(history$gene)
-hist(history$length[history$stage == "juvenile"])
-hist(history$length[history$stage == "migrant"])
 
 print_gene_histograms(history, facet = TRUE)
 
