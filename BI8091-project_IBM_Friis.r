@@ -496,91 +496,97 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
 
     # Run simulation
     for (t in 1:max_time) {
-        print(paste("Year", t))
+        tryCatch({
 
-        ### Winter update
-        population <- winter_update(population, juv_mort, mig_winter_mort)
+            print(paste("Year", t))
 
-        # Assess mortality
-        if  (undertaker == TRUE) {
-            unalived <- rbind(unalived, asses_mortality(population, t, "winter"))
-        }
+            ### Winter update
+            population <- winter_update(population, juv_mort, mig_winter_mort)
 
-        # Take a snapshot of the population if snap is TRUE
-        if (snap == TRUE && t %% snap_interval == 0) {
-            # Saves living individuals in snapshot
-            snapshot <- population[population$alive == TRUE, ]
-            snapshot$year <- t
-            history <- rbind(history, snapshot)
-        }
+            # Assess mortality
+            if  (undertaker == TRUE) {
+                unalived <- rbind(unalived, asses_mortality(population, t, "winter"))
+            }
 
-        # # Count the number of fish in each stage if count is TRUE
-        # if (count == TRUE) {
-        #     result <- rbind(result, asses_count(population, t, "winter"))
-        # }
+            # Take a snapshot of the population if snap is TRUE
+            if (snap == TRUE && t %% snap_interval == 0) {
+                # Saves living individuals in snapshot
+                snapshot <- population[population$alive == TRUE, ]
+                snapshot$year <- t
+                history <- rbind(history, snapshot)
+            }
 
-        ### Spring migration
-        if (flood_interval > 0 && flood_interval_th <= t && t %% flood_interval == 0) {
-            print("Flood")
-            print(paste("Before flood: ", sum(population$alive == TRUE)))
-            population <- flood(population, flood_removal)
-            print(paste("After flood: ",  sum(population$alive == TRUE)))
-        }
-        if (flow_flux == TRUE) {
-            fluxed_flow <- rnorm(1, mean = flow, sd = 3)
-            population <- spring_migration(population, fluxed_flow, mig_mort_base, turb_mort_base, flow_th)
-            print(paste("Flow:", fluxed_flow))
+            # # Count the number of fish in each stage if count is TRUE
+            # if (count == TRUE) {
+            #     result <- rbind(result, asses_count(population, t, "winter"))
+            # }
 
-        } else {
-            population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
-        }
+            ### Spring migration
+            if (flood_interval > 0 && flood_interval_th <= t && t %% flood_interval == 0) {
+                print("Flood")
+                print(paste("Before flood: ", sum(population$alive == TRUE)))
+                population <- flood(population, flood_removal)
+                print(paste("After flood: ",  sum(population$alive == TRUE)))
+            }
+            if (flow_flux == TRUE) {
+                fluxed_flow <- rnorm(1, mean = flow, sd = 3)
+                population <- spring_migration(population, fluxed_flow, mig_mort_base, turb_mort_base, flow_th)
+                print(paste("Flow:", fluxed_flow))
 
-        # Assess mortality
-        if  (undertaker == TRUE) {
-            unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
-        }
+            } else {
+                population <- spring_migration(population, flow, mig_mort_base, turb_mort_base, flow_th)
+            }
 
-        # # Count the number of fish in each stage if count is TRUE
-        # if (count == TRUE) {
-        #     result <- rbind(result, asses_count(population, t, "spring"))
-        # }
+            # Assess mortality
+            if  (undertaker == TRUE) {
+                unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
+            }
 
-        ### Summer update
-        population <- summer_update(population, juv_mort, sea_mort, growth_mig)
-        # Assess mortality
-        if  (undertaker == TRUE) {
-            unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
-        }
-        # # Count the number of fish in each stage if count is TRUE
-        # if (count == TRUE) {
-        #     result <- rbind(result, asses_count(population, t, "summer"))
-        # }
+            # # Count the number of fish in each stage if count is TRUE
+            # if (count == TRUE) {
+            #     result <- rbind(result, asses_count(population, t, "spring"))
+            # }
 
-        ### Autmn migration
-        population <- autmn_migration(population, mig_mort_base)
+            ### Summer update
+            population <- summer_update(population, juv_mort, sea_mort, growth_mig)
+            # Assess mortality
+            if  (undertaker == TRUE) {
+                unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
+            }
+            # # Count the number of fish in each stage if count is TRUE
+            # if (count == TRUE) {
+            #     result <- rbind(result, asses_count(population, t, "summer"))
+            # }
 
-        ### Spawning
-        population <- spawning(mID, population, juv_per_female, redd_cap, mutation_sd)
+            ### Autmn migration
+            population <- autmn_migration(population, mig_mort_base)
 
-        ### Post Spawning Migration
-        population <- post_spawning_migration(population, post_spawn_mig_mort_base)
+            ### Spawning
+            population <- spawning(mID, population, juv_per_female, redd_cap, mutation_sd)
 
-        # Assess mortality
-        if  (undertaker == TRUE) {
-            unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
-        }
-        # Count the number of fish in each stage if count is TRUE
-        if (count == TRUE) {
-            result <- rbind(result, asses_count(population, t, "autmn"))
-        }
+            ### Post Spawning Migration
+            population <- post_spawning_migration(population, post_spawn_mig_mort_base)
 
-        # Check if population is extinct
-        if (nrow(population) == 0) {
-            print("Population extinct")
-            return(list(population = population, unalived = unalived, history = history, result = result))
-        }
-        # Update mID
-        mID <- max(population$id)
+            # Assess mortality
+            if  (undertaker == TRUE) {
+                unalived <- rbind(unalived, asses_mortality(population, t, "autmn"))
+            }
+            # Count the number of fish in each stage if count is TRUE
+            if (count == TRUE) {
+                result <- rbind(result, asses_count(population, t, "autmn"))
+            }
+
+            # Check if population is extinct
+            if (nrow(population) == 0) {
+                print("Population extinct")
+                return(list(population = population, unalived = unalived, history = history, result = result))
+            }
+            # Update mID
+            mID <- max(population$id)
+    }, error = function(e) {
+        return(list(population = population, unalived = unalived, history = history, result = result))
+
+        })
     }
     return(list(population = population, unalived = unalived, history = history, result = result))
 }
