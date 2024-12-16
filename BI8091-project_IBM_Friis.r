@@ -22,10 +22,15 @@ setup_packages <- function() {
         print("Installing httpgd")
         install.packages("httpgd")
     }
+    if (!require(broom)) {
+        print("Installing broom")
+        install.packages("broom")
+    }
     library(dplyr)
     library(ggplot2)
     library(lubridate)
     library(httpgd) # Pakke for plots i VS Code
+    library(broom)
     print("Packages loaded")
 }
 
@@ -394,6 +399,9 @@ post_spawning_migration <- function(population, post_spawn_mig_mort_base) {
 
     # Combine juveniles and migrants
     population <- rbind(juveniles, migrating_migrants, non_migrating_migrants)
+
+    # Return only living fish
+    population <- population[population$alive, ]
     return(population)
 }
 
@@ -418,12 +426,10 @@ asses_mortality <- function(population, year, season) {
 asses_count <- function(population, year, season) {
     result <- list()
     result$year <- year
-    result$season <- season
+    #result$season <- season
     result$juveniles <- sum(population$stage == "juvenile")
     result$migrants <- sum(population$stage == "migrant")
     result$gene <- mean(population$gene, na.rm = TRUE)
-    result$gene_migration <- mean(population$gene[population$stage == "migrant"], na.rm = TRUE)
-    result$gene_juvenile <- mean(population$gene[population$stage == "juvenile"], na.rm = TRUE)
     return(result)
 }
 
@@ -508,10 +514,10 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
             history <- rbind(history, snapshot)
         }
 
-        # Count the number of fish in each stage if count is TRUE
-        if (count == TRUE) {
-            result <- rbind(result, asses_count(population, t, "winter"))
-        }
+        # # Count the number of fish in each stage if count is TRUE
+        # if (count == TRUE) {
+        #     result <- rbind(result, asses_count(population, t, "winter"))
+        # }
 
         ### Spring migration
         if (flood_interval > 0 && flood_interval_th <= t && t %% flood_interval == 0) {
@@ -534,10 +540,10 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
             unalived <- rbind(unalived, asses_mortality(population, t, "spring"))
         }
 
-        # Count the number of fish in each stage if count is TRUE
-        if (count == TRUE) {
-            result <- rbind(result, asses_count(population, t, "spring"))
-        }
+        # # Count the number of fish in each stage if count is TRUE
+        # if (count == TRUE) {
+        #     result <- rbind(result, asses_count(population, t, "spring"))
+        # }
 
         ### Summer update
         population <- summer_update(population, juv_mort, sea_mort, growth_mig)
@@ -545,10 +551,10 @@ simulation <- function(num_fish, max_time, juv_mort, mig_winter_mort, mig_mort_b
         if  (undertaker == TRUE) {
             unalived <- rbind(unalived, asses_mortality(population, t, "summer"))
         }
-        # Count the number of fish in each stage if count is TRUE
-        if (count == TRUE) {
-            result <- rbind(result, asses_count(population, t, "summer"))
-        }
+        # # Count the number of fish in each stage if count is TRUE
+        # if (count == TRUE) {
+        #     result <- rbind(result, asses_count(population, t, "summer"))
+        # }
 
         ### Autmn migration
         population <- autmn_migration(population, mig_mort_base)
@@ -680,3 +686,188 @@ result <- pops$result
 # Endre flood funksjonen til å kun ta ut migranter som er i elven på våren
 # Gjøre det om til en aseksuell modell hvor det kun modelleres hunner
 # Cap gene at 0 and 1
+
+
+big_run <- function(n) {
+    big_res <- list()
+    big_hist <- list()
+    for (i in 1:n) {
+        print(paste("Run", i))
+        tryCatch({
+            pops <- simulation(
+                num_fish = 10000,
+                max_time = 20000, # 20000
+                snap = TRUE,
+                snap_interval = 2000, # 2000
+                juv_mort = 0.4,
+                mig_winter_mort = 0.1,
+                mig_mort_base = 0.1,
+                post_spawn_mig_mort_base = 0.3,
+                sea_mort = 0.1,
+                growth_mig = function() {
+                    return(rnorm(1, mean = 7, sd = 3))
+                },
+                flow = 11,
+                flow_th = 10,
+                flow_flux = FALSE,
+                turb_mort_base = 0.1,
+                juv_per_female = 10,
+                mutation_sd = 0.05,
+                redd_cap = 300,
+                flood_interval = 25,
+                flood_interval_th = 10000, # 10000
+                flood_removal = 0.8,
+                undertaker = FALSE,
+                count = TRUE
+            )
+            big_res[[i]] <- pops$result
+            big_hist[[i]] <- pops$history
+        }, error = function(e) {
+            print(paste("Error in run", i, ":", e$message))
+        })
+    }
+    time <- format(Sys.time(), "%Y%m%d_%H%M%S")
+    saveRDS(big_res, file = paste0("big_res_", time, ".rds"))
+    saveRDS(big_hist, file = paste0("big_hist_", time, ".rds"))
+    return(list(result = big_res, history = big_hist))
+}
+
+big <- big_run(20)
+
+
+big_res <- big$result
+big_hist <- big$history
+
+
+#' Calculate the average mean gene value, number of juveniles, and number of migrants for each year across multiple runs
+#' @param big_res List of data frames containing the results of each simulation run
+#' @return Data frame with the average mean gene value, number of juveniles, and number of migrants for each year
+average_simulation_results <- function(big_res) {
+    # remove runs with no results
+    big_res <- big_res[sapply(big_res, function(x) !is.null(x))]
+    # Combine the mean gene values, number of juveniles, and number of migrants from all runs
+    combined_results <- do.call(rbind, lapply(big_res, function(x) {
+        x %>%
+            group_by(year) %>%
+            summarize(
+                mean_gene = mean(gene, na.rm = TRUE),
+                num_juveniles = mean(juveniles, na.rm = TRUE),
+                num_migrants = mean(migrants, na.rm = TRUE)
+            )
+    }))
+    
+    # Calculate the average mean gene value, number of juveniles, and number of migrants for each year
+    average_results <- combined_results %>%
+        group_by(year) %>%
+        summarize(
+            avg_mean_gene = mean(mean_gene, na.rm = TRUE),
+            avg_num_juveniles = mean(num_juveniles, na.rm = TRUE),
+            avg_num_migrants = mean(num_migrants, na.rm = TRUE)
+        )
+    
+    return(average_results)
+}
+
+average_results <- average_simulation_results(big_res)
+
+# Split the data into before and after 10000 years
+average_results <- average_results %>%
+    mutate(period = ifelse(year < 10000, "Before 10000", "After 10000"))
+
+
+### Plot population at autmn counts
+average_results %>%
+    ggplot(aes(x = year)) +
+    geom_line(aes(y = avg_num_juveniles, color = "Juveniles")) +
+    geom_line(aes(y = avg_num_migrants, color = "Migrants")) +
+    geom_line(aes(y = avg_mean_gene * 2000, color = "Mean Gene"), linetype = "dashed") +
+    geom_vline(xintercept = 10000, linetype = "longdash", color = "salmon", size = 1) + 
+    labs(title = "Population in Autmn per Year", x = "Year", y = "Average Number of Individuals") +
+    scale_color_manual(values = c("Juveniles" = "black", "Migrants" = "blue", "Mean Gene" = "red"),
+                       name = "",
+                       labels = c("Juveniles", "Average Mean Gene Value", "Migrants")) +
+    scale_y_continuous(
+        sec.axis = sec_axis(~ . / 2000, name = "Average Mean Gene Value", breaks = seq(0, 1, by = 0.1))
+    ) +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5), axis.title.y.right = element_text(hjust = 0.89))
+
+### Plot yearly mean gene value
+average_results %>%
+    ggplot(aes(x = year)) +
+    geom_line(aes(y = avg_mean_gene), linetype = "dashed") +
+    geom_vline(xintercept = 10000, linetype = "longdash", color = "salmon", size = 1) + 
+    labs(title = "Average Gene Value per Year", x = "Year", y = "Average Number of Individuals") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+
+# Split the data into before and after 10000 years
+before_10000_gene <- average_results %>%
+    filter(year < 10000) %>%
+    pull(avg_mean_gene)
+
+after_10000_gene <- average_results %>%
+    filter(year >= 10000) %>%
+    pull(avg_mean_gene)
+
+# Perform a t-test
+t_test_gene <- t.test(before_10000_gene, after_10000_gene)
+
+# Split the data into before and after 10000 years and test for juv counts
+before_10000_juv <- average_results %>%
+    filter(year < 10000) %>%
+    pull(avg_num_juveniles)
+
+after_10000_juv <- average_results %>%
+    filter(year >= 10000) %>%
+    pull(avg_num_juveniles)
+
+# Perform a t-test
+t_test_juv <- t.test(before_10000_juv, after_10000_juv)
+
+# Split the data into before and after 10000 years and test for migrant counts
+before_10000_mig <- average_results %>%
+    filter(year < 10000) %>%
+    pull(avg_num_migrants)
+
+after_10000_mig <- average_results %>%
+    filter(year >= 10000) %>%
+    pull(avg_num_migrants)
+
+# Perform a t-test
+t_test_mig <- t.test(before_10000_mig, after_10000_mig)
+
+# Create a data frame to store the t-test results
+t_test_results <- bind_rows(
+    tidy(t_test_gene) %>% mutate(test = "Gene Values"),
+    tidy(t_test_juv) %>% mutate(test = "Juvenile Counts"),
+    tidy(t_test_mig) %>% mutate(test = "Migrant Counts")
+)
+
+# Print the t-test results table
+print(t_test_results)
+
+# Boxplot and Violin plot for gene values
+ggplot(average_results, aes(x = period, y = avg_mean_gene, fill = period)) +
+    geom_violin(trim = FALSE, alpha = 0.5) +
+    geom_boxplot(width = 0.1, outlier.shape = NA) +
+    labs(title = "Gene Values Before and After 10000 Years", x = "Period", y = "Average Mean Gene Value") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot and Violin plot for juvenile counts
+ggplot(average_results, aes(x = period, y = avg_num_juveniles, fill = period)) +
+    geom_violin(trim = FALSE, alpha = 0.5) +
+    geom_boxplot(width = 0.1, outlier.shape = NA) +
+    labs(title = "Juvenile Counts Before and After 10000 Years", x = "Period", y = "Average Number of Juveniles") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+
+# Boxplot and Violin plot for migrant counts
+ggplot(average_results, aes(x = period, y = avg_num_migrants, fill = period)) +
+    geom_violin(trim = FALSE, alpha = 0.5) +
+    geom_boxplot(width = 0.1, outlier.shape = NA) +
+    labs(title = "Migrant Counts Before and After 10000 Years", x = "Period", y = "Average Number of Migrants") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
